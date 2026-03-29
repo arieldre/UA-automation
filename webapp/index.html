@@ -445,11 +445,19 @@ async function loadReport(forceRefresh = false) {
 }
 
 initDates();
-['fromDate','toDate'].forEach(id => {
-  document.getElementById(id).addEventListener('click', function() {
-    try { this.showPicker(); } catch(_) {}
+(function() {
+  const yesterday = localDateStr(new Date(Date.now()-86400000));
+  ['fromDate','toDate'].forEach(id => {
+    const el = document.getElementById(id);
+    el.max = yesterday;
+    el.addEventListener('click', function() { try { this.showPicker(); } catch(_) {} });
+    el.addEventListener('change', function() {
+      // clamp to yesterday
+      if (this.value > yesterday) this.value = yesterday;
+      loadReport();
+    });
   });
-});
+})();
 loadReport();
 
 // ── Page navigation ───────────────────────────────────────
