@@ -1,0 +1,209 @@
+{
+  "name": "Google Ads vs AppsFlyer Daily Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 11 * * *"}]
+        }
+      },
+      "id": "node-schedule",
+      "name": "Daily 9am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = new Date();\nd.setDate(d.getDate() - 1);\nreturn [{json: {yesterday: d.toISOString().split('T')[0]}}];"
+      },
+      "id": "node-date",
+      "name": "Set Yesterday",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://googleads.googleapis.com/v23/customers/9698502211/googleAds:search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleAdsOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "developer-token", "value": "YOUR_GOOGLE_DEVELOPER_TOKEN"},
+            {"name": "login-customer-id", "value": "9698502211"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\"query\":\"SELECT campaign.name, metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions FROM campaign WHERE segments.date = '{{ $('Set Yesterday').item.json.yesterday }}' AND campaign.status = 'ENABLED'\"}",
+        "options": {}
+      },
+      "credentials": {
+        "googleAdsOAuth2Api": {
+          "id": "",
+          "name": "Google Ads account"
+        }
+      },
+      "id": "node-gads",
+      "name": "Google Ads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://hq1.appsflyer.com/api/agg-data/export/app/gg.oneupgames.ggclient/partners_by_date_report/v5?from={{ $('Set Yesterday').item.json.yesterday }}&to={{ $('Set Yesterday').item.json.yesterday }}&media_source=googleadwords_int&category=standard",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Header Auth account"
+        }
+      },
+      "id": "node-af-android",
+      "name": "AppsFlyer Android",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://hq1.appsflyer.com/api/agg-data/export/app/id1611003698/partners_by_date_report/v5?from={{ $('Set Yesterday').item.json.yesterday }}&to={{ $('Set Yesterday').item.json.yesterday }}&media_source=googleadwords_int&category=standard",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Header Auth account"
+        }
+      },
+      "id": "node-af-ios",
+      "name": "AppsFlyer iOS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== TOGGLE METRICS HERE =====\nconst SHOW_SPEND       = true;\nconst SHOW_CLICKS      = true;\nconst SHOW_IMPRESSIONS = true;\nconst SHOW_CONVERSIONS = true;\nconst SHOW_CPA         = true;\nconst SHOW_INSTALLS    = true;\nconst SHOW_ROAS        = true;\nconst SHOW_DISCREPANCY = true;\nconst SHOW_ARPU        = true;\nconst SHOW_CTR         = true;\nconst SHOW_CONV_RATE   = true;\nconst SIG_THRESHOLD    = 0.10; // flag differences >= 10%\n// ================================\n\nconst date = $('Set Yesterday').first().json.yesterday;\n\n// --- Google Ads ---\nconst adsRaw = $('Google Ads').first().json;\nconst results = adsRaw.results || [];\nlet spend = 0, clicks = 0, impressions = 0, conversions = 0;\nfor (const r of results) {\n  spend       += (r.metrics?.costMicros || 0) / 1e6;\n  clicks      += parseInt(r.metrics?.clicks || 0);\n  impressions += parseInt(r.metrics?.impressions || 0);\n  conversions += parseFloat(r.metrics?.conversions || 0);\n}\nconst cpa = conversions > 0 ? spend / conversions : null;\n\n// --- AppsFlyer CSV parser ---\nconst parseAF = (raw) => {\n  const csv = typeof raw === 'string' ? raw : JSON.stringify(raw);\n  const lines = csv.trim().split('\\n').filter(l => l.trim());\n  if (lines.length < 2) return {total: 0, byCampaign: {}};\n  const headers = lines[0].split(',').map(h => h.trim().replace(/\"/g, ''));\n  const campIdx     = headers.indexOf('Campaign (c)') !== -1 ? headers.indexOf('Campaign (c)') : headers.indexOf('Campaign');\n  const installsIdx = headers.indexOf('Installs');\n  const clicksIdx   = headers.indexOf('Clicks');\n  const impIdx      = headers.indexOf('Impressions');\n  const costIdx     = headers.indexOf('Total Cost') !== -1 ? headers.indexOf('Total Cost') : headers.indexOf('Cost');\n  const revIdx      = headers.indexOf('Total Revenue');\n  const ecpiIdx     = headers.indexOf('Average eCPI');\n  const roiIdx      = headers.indexOf('ROI');\n  const byCampaign = {};\n  let total = 0;\n  for (const line of lines.slice(1)) {\n    const vals = line.split(',').map(v => v.trim().replace(/\"/g, ''));\n    const camp = vals[campIdx] || 'Unknown';\n    if (!byCampaign[camp]) byCampaign[camp] = {installs:0, clicks:0, impressions:0, cost:0, revenue:0, ecpi:0, roi:'N/A'};\n    byCampaign[camp].installs    += parseInt(vals[installsIdx]   || 0);\n    byCampaign[camp].clicks      += parseInt(vals[clicksIdx]     || 0);\n    byCampaign[camp].impressions += parseInt(vals[impIdx]        || 0);\n    byCampaign[camp].cost        += parseFloat(vals[costIdx]     || 0);\n    byCampaign[camp].revenue     += parseFloat(vals[revIdx]      || 0);\n    byCampaign[camp].ecpi         = parseFloat(vals[ecpiIdx]     || 0);\n    byCampaign[camp].roi          = vals[roiIdx] || 'N/A';\n    total += parseInt(vals[installsIdx] || 0);\n  }\n  return {total, byCampaign};\n};\n\nconst getAF = (name) => { const r = $(name).first().json; return r.data || r.body || (typeof r === 'string' ? r : JSON.stringify(r)); };\nconst android = parseAF(getAF('AppsFlyer Android'));\nconst ios     = parseAF(getAF('AppsFlyer iOS'));\n\nconst afByCampaign = {};\nconst mergeInto = (src) => {\n  for (const [k, v] of Object.entries(src)) {\n    if (!afByCampaign[k]) afByCampaign[k] = {installs:0, clicks:0, impressions:0, cost:0, revenue:0, ecpi:0, roi:'N/A'};\n    afByCampaign[k].installs    += v.installs    || 0;\n    afByCampaign[k].clicks      += v.clicks      || 0;\n    afByCampaign[k].impressions += v.impressions || 0;\n    afByCampaign[k].cost        += v.cost        || 0;\n    afByCampaign[k].revenue     += v.revenue     || 0;\n    afByCampaign[k].ecpi         = v.ecpi        || afByCampaign[k].ecpi;\n    afByCampaign[k].roi          = v.roi         || afByCampaign[k].roi;\n  }\n};\nmergeInto(android.byCampaign);\nmergeInto(ios.byCampaign);\n\nconst totalInstalls = android.total + ios.total;\nconst cpi = totalInstalls > 0 ? (spend / totalInstalls).toFixed(2) : 'N/A';\n\n// --- Helpers ---\nconst isSig = (a, b) => {\n  if (a == null || b == null || a === 0 || b === 0) return false;\n  return Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b)) >= SIG_THRESHOLD;\n};\nconst diffPct = (af, ga) => {\n  if (ga === 0) return af === 0 ? '0.0%' : '+INF%';\n  const d = ((af - ga) / Math.abs(ga)) * 100;\n  return (d >= 0 ? '+' : '') + d.toFixed(1) + '%';\n};\nconst p = (s, n) => String(s).padEnd(n);\n\n// row: compared metric (both AF and GA)\nconst row = (label, afVal, gaVal, afNum, gaNum, prefix) => {\n  const flag = isSig(afNum, gaNum) ? ' ⚠' : '';\n  const diff = (afNum != null && gaNum != null && !(afNum === 0 && gaNum === 0))\n    ? diffPct(afNum, gaNum) : '—';\n  const afStr = prefix ? prefix + afVal : String(afVal);\n  const gaStr = prefix ? prefix + gaVal : String(gaVal);\n  return p(label, 16) + p(afStr, 14) + p(gaStr, 14) + p(diff + flag, 12);\n};\n\n// rowAF: AF-only metric\nconst rowAF = (label, afVal) => p(label, 16) + p(afVal, 14) + p('—', 14) + '—';\n\n// --- Build Slack message ---\nconst out = [`📊 *Daily Report — ${date}*`, ''];\n\nout.push('*Overall — Google Ads (Urban Heat)*');\nconst totalCtr      = impressions > 0 ? ((clicks / impressions) * 100).toFixed(2) + '%' : 'N/A';\nconst totalConvRate = clicks > 0 ? ((conversions / clicks) * 100).toFixed(2) + '%' : 'N/A';\nif (SHOW_SPEND)       out.push(`• Spend: $${spend.toFixed(2)}`);\nif (SHOW_CLICKS)      out.push(`• Clicks: ${clicks.toLocaleString()}`);\nif (SHOW_IMPRESSIONS) out.push(`• Impressions: ${impressions.toLocaleString()}`);\nif (SHOW_CONVERSIONS) out.push(`• Conversions: ${conversions.toFixed(0)}`);\nif (SHOW_CPA && cpa)  out.push(`• CPA: $${cpa.toFixed(2)}`);\nif (SHOW_CTR)         out.push(`• CTR: ${totalCtr}`);\nif (SHOW_CONV_RATE)   out.push(`• Conv Rate: ${totalConvRate}`);\n\nout.push('');\nout.push('*Per Campaign:*');\n\nfor (const r of results) {\n  const name  = r.campaign?.name || 'Unknown';\n  const gaS   = (r.metrics?.costMicros || 0) / 1e6;\n  const gaCl  = parseInt(r.metrics?.clicks || 0);\n  const gaImp = parseInt(r.metrics?.impressions || 0);\n  const gaCv  = parseFloat(r.metrics?.conversions || 0);\n  const gaCpa = gaCv > 0 ? gaS / gaCv : null;\n  const gaCtr = gaImp > 0 ? (gaCl / gaImp) * 100 : null;\n  const gaConvRate = gaCl > 0 ? (gaCv / gaCl) * 100 : null;\n\n  const af = afByCampaign[name] || {installs:0, clicks:0, impressions:0, cost:0, revenue:0, ecpi:0, roi:'N/A'};\n  const afCost     = af.cost || 0;\n  const afRev      = af.revenue || 0;\n  const afEcpi     = af.ecpi || 0;\n  const afRoas     = afCost > 0 ? (afRev / afCost) * 100 : null;\n  const afRoiNum   = af.roi && af.roi !== 'N/A' ? parseFloat(af.roi) : null;\n  const afArpu     = af.installs > 0 ? afRev / af.installs : null;\n  const afCtr      = af.impressions > 0 ? (af.clicks / af.impressions) * 100 : null;\n  const afConvRate = af.clicks > 0 ? (af.installs / af.clicks) * 100 : null;\n\n  out.push('');\n  out.push(`  › *${name}*`);\n  out.push('```');\n  out.push(p('Category', 16) + p('AppsFlyer', 14) + p('Google Ads', 14) + 'Diff');\n  out.push('─'.repeat(56));\n  if (SHOW_SPEND)       out.push(row('Spend',        afCost.toFixed(2),   gaS.toFixed(2),   afCost,           gaS,   '$'));\n  if (SHOW_CLICKS)      out.push(row('Clicks',        (af.clicks||0).toLocaleString(), gaCl.toLocaleString(), af.clicks||0, gaCl));\n  if (SHOW_IMPRESSIONS) out.push(row('Impressions',   (af.impressions||0).toLocaleString(), gaImp.toLocaleString(), af.impressions||0, gaImp));\n  if (SHOW_CONVERSIONS) out.push(row('Conv/Install',  String(af.installs||0), gaCv.toFixed(0), af.installs||0, gaCv));\n  if (SHOW_CPA)         out.push(row('CPA / eCPI',    afEcpi > 0 ? afEcpi.toFixed(2) : '—', gaCpa != null ? gaCpa.toFixed(2) : '—', afEcpi > 0 ? afEcpi : null, gaCpa, '$'));\n  if (SHOW_CTR)         out.push(row('CTR',           afCtr != null ? afCtr.toFixed(2)+'%' : '—', gaCtr != null ? gaCtr.toFixed(2)+'%' : '—', afCtr, gaCtr));\n  if (SHOW_CONV_RATE)   out.push(row('Conv Rate',     afConvRate != null ? afConvRate.toFixed(2)+'%' : '—', gaConvRate != null ? gaConvRate.toFixed(2)+'%' : '—', afConvRate, gaConvRate));\n  out.push('─'.repeat(56));\n  if (SHOW_ROAS) out.push(rowAF('ROAS',    afRoas    != null ? afRoas.toFixed(0)+'%'    : '—'));\n  out.push(       rowAF('ROI',     afRoiNum  != null ? afRoiNum.toFixed(2)+'%'  : '—'));\n  out.push(       rowAF('Revenue', '$'+afRev.toFixed(2)));\n  if (SHOW_ARPU) out.push(rowAF('ARPU',    afArpu    != null ? '$'+afArpu.toFixed(4)    : '—'));\n  out.push('```');\n}\n\nout.push('');\nout.push('*AppsFlyer Totals (Google Ads traffic only)*');\nif (SHOW_INSTALLS) out.push(`• Total Installs: ${totalInstalls.toLocaleString()}  (🤖 ${android.total} Android  /  🍎 ${ios.total} iOS)`);\nif (SHOW_DISCREPANCY) {\n  out.push('');\n  const convGap = conversions - totalInstalls;\n  const gapDir = convGap > 0 ? '⬆ GA higher' : '⬇ AF higher';\n  out.push(`*Conversion Gap:* ${Math.abs(convGap).toFixed(0)} installs (${gapDir})`);\n  out.push(`*CPI:* $${cpi} (Ads spend / AF installs)`);\n}\nout.push('');\nout.push('_⚠ = difference ≥10%_');\n\nreturn [{json: {message: out.join('\\n')}}];"
+      },
+      "id": "node-report",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const message = $('Build Report').first().json.message;\nreturn [{\n  json: {\n    model: 'gpt-4.1-mini',\n    max_tokens: 300,\n    messages: [\n      {\n        role: 'system',\n        content: 'You are a mobile gaming performance marketing analyst. You receive a daily Google Ads vs AppsFlyer report and write a short Slack-ready summary for the team. Be direct and concise - 4 to 6 bullet points max. Flag anything unusual: big spend days, high discrepancies between GA and AF, poor CPI, strong ROAS, or campaigns that stand out. Write in plain language.'\n      },\n      {\n        role: 'user',\n        content: 'Here is today performance report. Summarize the most important takeaways:\\n\\n' + message\n      }\n    ]\n  }\n}];"
+      },
+      "id": "node-prepare-ai",
+      "name": "Prepare AI Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAi account"
+        }
+      },
+      "id": "node-openai",
+      "name": "AI Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const summary = $('AI Summary').first().json.choices?.[0]?.message?.content?.trim() || '';\nconst report  = $('Build Report').first().json.message;\nconst fullMessage = summary\n  ? '*AI Summary*\\n' + summary + '\\n\\n' + '-'.repeat(30) + '\\n\\n' + report\n  : report;\nreturn [{json: {message: fullMessage}}];"
+      },
+      "id": "node-attach-summary",
+      "name": "Attach Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 300]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "automate-compare",
+          "mode": "name"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "",
+          "name": "Slack account"
+        }
+      },
+      "id": "node-slack",
+      "name": "Slack Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2180, 300]
+    }
+  ],
+  "connections": {
+    "Daily 9am": {
+      "main": [[{"node": "Set Yesterday", "type": "main", "index": 0}]]
+    },
+    "Set Yesterday": {
+      "main": [[{"node": "Google Ads", "type": "main", "index": 0}]]
+    },
+    "Google Ads": {
+      "main": [[{"node": "AppsFlyer Android", "type": "main", "index": 0}]]
+    },
+    "AppsFlyer Android": {
+      "main": [[{"node": "AppsFlyer iOS", "type": "main", "index": 0}]]
+    },
+    "AppsFlyer iOS": {
+      "main": [[{"node": "Build Report", "type": "main", "index": 0}]]
+    },
+    "Build Report": {
+      "main": [[{"node": "Prepare AI Request", "type": "main", "index": 0}]]
+    },
+    "Prepare AI Request": {
+      "main": [[{"node": "AI Summary", "type": "main", "index": 0}]]
+    },
+    "AI Summary": {
+      "main": [[{"node": "Attach Summary", "type": "main", "index": 0}]]
+    },
+    "Attach Summary": {
+      "main": [[{"node": "Slack Report", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false}
+}

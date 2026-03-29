@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Urban Heat — Ad Dashboard</title>
+<style>
+:root {
+  --bg:#0d0d14; --surface:#16161f; --surface2:#1e1e2a; --border:#2a2a38;
+  --text:#e2e2f0; --muted:#6b6b88; --accent:#7c6fff;
+  --green:#22c55e; --red:#ef4444; --green-bg:rgba(34,197,94,.08); --red-bg:rgba(239,68,68,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px}
+
+/* ── Filters bar ── */
+.filters{display:flex;align-items:center;gap:8px;padding:14px 24px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap;position:sticky;top:0;z-index:20}
+.filters h1{font-size:16px;font-weight:600;margin-right:8px;white-space:nowrap}
+.filters h1 span{color:var(--accent)}
+.sep{width:1px;height:20px;background:var(--border);flex-shrink:0}
+select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:12px;outline:none;cursor:pointer}
+select:focus{border-color:var(--accent)}
+.btn-group{display:flex;gap:3px}
+.btn{background:var(--bg);border:1px solid var(--border);color:var(--muted);padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.icon{padding:5px 9px;font-size:14px}
+input[type=date]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:12px;outline:none}
+input[type=date]:focus{border-color:var(--accent)}
+
+/* ── Metric toggles ── */
+.metric-bar{display:flex;align-items:center;gap:6px;padding:10px 24px;background:var(--surface2);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.metric-bar .bar-label{font-size:11px;color:var(--muted);margin-right:4px;white-space:nowrap}
+.chip{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid var(--border);color:var(--muted);background:none;transition:all .15s;white-space:nowrap}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip:hover:not(.on){border-color:var(--accent);color:var(--accent)}
+
+/* ── Main ── */
+main{max-width:1200px;margin:0 auto;padding:20px 24px}
+
+/* ── Metrics table ── */
+.section-hd{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;margin-top:24px}
+.metrics-table{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:4px}
+.metrics-table table{width:100%;border-collapse:collapse}
+.metrics-table thead th{padding:9px 18px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border)}
+.metrics-table thead th:not(:first-child){text-align:right}
+.metrics-table tbody tr:hover{background:rgba(255,255,255,.02)}
+.metrics-table tbody td{padding:10px 18px;font-size:13px;font-variant-numeric:tabular-nums}
+.metrics-table tbody td:not(:first-child){text-align:right}
+.metric-name{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;cursor:help;position:relative}
+.metric-name .tip-icon{font-size:10px;border:1px solid var(--border);border-radius:50%;padding:0 3px;color:var(--border)}
+.metric-name .tooltip{display:none;position:absolute;left:0;top:calc(100% + 4px);background:#1a1a2e;border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:11px;line-height:1.5;width:240px;z-index:100;box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:none}
+.metric-name .tooltip strong{color:var(--accent);display:block;margin-bottom:3px}
+.metric-name:hover .tooltip{display:block}
+
+/* ── Diff chip ── */
+.diff{font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px;display:inline-block}
+.diff.good{color:var(--green);background:var(--green-bg)}
+.diff.warn{color:var(--red);background:var(--red-bg)}
+.diff.neutral{color:var(--muted)}
+
+/* ── Timeline ── */
+.timeline-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;overflow-x:auto;margin-bottom:4px}
+.timeline-wrap table{border-collapse:collapse;min-width:100%}
+.timeline-wrap thead th{padding:9px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.timeline-wrap thead th:not(:first-child){text-align:right}
+.timeline-wrap tbody tr:hover{background:rgba(124,111,255,.04)}
+.timeline-wrap tbody td{padding:8px 14px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.timeline-wrap tbody td:not(:first-child){text-align:right}
+.timeline-wrap td.date-cell{color:var(--text);font-weight:500;font-size:12px}
+.timeline-wrap th.ga-col{color:#60a5fa}
+.timeline-wrap th.af-col{color:#a78bfa}
+.timeline-wrap th.derived-col{color:var(--muted)}
+
+/* ── State ── */
+.state{text-align:center;padding:60px 20px;color:var(--muted)}
+.state .icon{font-size:36px;margin-bottom:10px}
+.error-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:14px 18px;color:var(--red);margin-bottom:16px;font-size:13px}
+.hint{font-size:11px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+
+<!-- Filters -->
+<div class="filters">
+  <h1>Urban Heat — <span>Ad Dashboard</span></h1>
+  <div class="sep"></div>
+  <select id="campaignFilter"><option value="all">All Campaigns</option></select>
+  <div class="btn-group" id="osFilter">
+    <button class="btn active" onclick="setOS('all',this)">All</button>
+    <button class="btn"        onclick="setOS('android',this)">🤖 Android</button>
+    <button class="btn"        onclick="setOS('ios',this)">🍎 iOS</button>
+  </div>
+  <div class="sep"></div>
+  <div class="btn-group" id="presetFilter">
+    <button class="btn" onclick="setPreset(7,this)">7d</button>
+    <button class="btn active" onclick="setPreset(14,this)">14d</button>
+    <button class="btn" onclick="setPreset(21,this)">21d</button>
+  </div>
+  <input type="date" id="fromDate">
+  <span style="color:var(--muted);font-size:11px">→</span>
+  <input type="date" id="toDate">
+  <button class="btn icon" id="refreshBtn" onclick="loadReport(true)" title="Force refresh from API">↻</button>
+  <span id="cacheTag" style="display:none;font-size:11px;color:var(--muted);white-space:nowrap"></span>
+</div>
+
+<!-- Metric toggles -->
+<div class="metric-bar">
+  <span class="bar-label">Show metrics:</span>
+  <button class="chip on"  data-metric="spend">Spend</button>
+  <button class="chip on"  data-metric="installs">Installs / Conv</button>
+  <button class="chip on"  data-metric="cpm">CPM</button>
+  <button class="chip on"  data-metric="cpi">CPI / CPA</button>
+  <button class="chip on"  data-metric="ctr">CTR</button>
+  <button class="chip on"  data-metric="cvr">CVR</button>
+  <button class="chip on"  data-metric="purchases">Purchases</button>
+  <button class="chip"     data-metric="revenue">Revenue</button>
+  <button class="chip"     data-metric="roas">ROAS</button>
+  <button class="chip"     data-metric="arpu">ARPU</button>
+  <button class="chip"     data-metric="sessions">Purchasers</button>
+</div>
+
+<main id="main">
+  <div class="state"><div class="icon">⏳</div><p>Loading…</p></div>
+</main>
+
+<script>
+// ── State ────────────────────────────────────────────────
+let reportData = null;
+let currentOS  = 'all';
+let currentView= 'day';
+let activeMetrics = new Set(['spend','installs','cpm','cpi','ctr','cvr','purchases']);
+
+// ── Chips ────────────────────────────────────────────────
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const m = chip.dataset.metric;
+    if (activeMetrics.has(m)) { activeMetrics.delete(m); chip.classList.remove('on'); }
+    else { activeMetrics.add(m); chip.classList.add('on'); }
+    if (reportData) render(reportData);
+  });
+});
+
+// ── Formatters ───────────────────────────────────────────
+const fmt = {
+  money: v => v == null ? '—' : '$' + v.toFixed(2),
+  num:   v => v == null ? '—' : Math.round(v).toLocaleString(),
+  pct:   v => v == null ? '—' : v.toFixed(2) + '%',
+};
+
+function diff(af, ga) {
+  if (af == null || ga == null || (af===0 && ga===0)) return '<span class="diff neutral">—</span>';
+  const p = ga===0 ? Infinity : ((af-ga)/Math.abs(ga))*100;
+  const lbl = isFinite(p) ? (p>=0?'+':'')+p.toFixed(1)+'%' : '+∞%';
+  return `<span class="diff ${Math.abs(p)>=10?'warn':'good'}">${lbl}</span>`;
+}
+
+function tip(title, body) {
+  return `<span class="tip-icon">?</span><div class="tooltip"><strong>${title}</strong>${body}</div>`;
+}
+
+// ── Metric definitions ───────────────────────────────────
+// Each: { label, tip, afVal(af), gaVal(ga), afNum(af), gaNum(ga), afOnly? }
+const METRIC_DEFS = {
+  spend:     { label:'Spend',          tipTitle:'Ad Spend',          tipBody:'GA: what Google charged. AF: cost reported by AppsFlyer.',                  af: a=>fmt.money(a.spend),   ga: g=>fmt.money(g.spend),       afN: a=>a.spend,      gaN: g=>g.spend },
+  installs:  { label:'Installs / Conv',tipTitle:'Installs vs Conversions', tipBody:'AF counts installs via SDK. GA counts a conversion per install. Gap = attribution discrepancy.',  af: a=>fmt.num(a.installs),  ga: g=>fmt.num(g.conversions),   afN: a=>a.installs,   gaN: g=>g.conversions },
+  cpm:       { label:'CPM',            tipTitle:'Cost Per 1000 Impressions', tipBody:'Spend ÷ Impressions × 1000. Shows how expensive your reach is.',          af: a=>fmt.money(a.cpm),     ga: g=>fmt.money(g.cpm),         afN: a=>a.cpm,        gaN: g=>g.cpm },
+  cpi:       { label:'CPI / CPA',      tipTitle:'Cost Per Install / Action', tipBody:'AF eCPI = Spend ÷ Installs. GA CPA = Spend ÷ Conversions.',               af: a=>fmt.money(a.ecpi),    ga: g=>fmt.money(g.cpa),         afN: a=>a.ecpi,       gaN: g=>g.cpa },
+  ctr:       { label:'CTR',            tipTitle:'Click-Through Rate',   tipBody:'Clicks ÷ Impressions. How often people click after seeing your ad.',         af: a=>fmt.pct(a.ctr),       ga: g=>fmt.pct(g.ctr),           afN: a=>a.ctr,        gaN: g=>g.ctr },
+  cvr:       { label:'CVR',            tipTitle:'Conversion Rate',      tipBody:'AF: Installs ÷ Clicks. GA: Conversions ÷ Clicks.',                           af: a=>fmt.pct(a.cvr),       ga: g=>fmt.pct(g.cvr),           afN: a=>a.cvr,        gaN: g=>g.cvr },
+  purchases: { label:'Purchases',      tipTitle:'Purchases',            tipBody:'AF: af_purchase events via SDK. GA: PURCHASE-category conversion actions. GA may be 0 for tCPA campaigns (India) — only populated for tROAS (US).', af: a=>fmt.num(a.purchases), ga: g=>fmt.num(g.purchases),                                    afN: a=>a.purchases,  gaN: g=>g.purchases },
+  revenue:   { label:'Revenue',        tipTitle:'In-App Revenue',       tipBody:'AF: total in-app revenue tracked by AppsFlyer SDK. GA: revenue from PURCHASE conversion actions — only populated for tROAS campaigns; tCPA campaigns return 0.',      af: a=>fmt.money(a.revenue), ga: g=>fmt.money(g.purchaseRevenue!=null&&g.purchaseRevenue>0?g.purchaseRevenue:g.revenue), afN: a=>a.revenue, gaN: g=>g.purchaseRevenue!=null&&g.purchaseRevenue>0?g.purchaseRevenue:g.revenue },
+  roas:      { label:'ROAS',           tipTitle:'Return on Ad Spend',   tipBody:'Revenue ÷ Spend × 100. AF: uses AppsFlyer total revenue. GA: uses purchase conversion revenue (tROAS campaigns only).',                                              af: a=>a.roas!=null?a.roas.toFixed(0)+'%':'—', ga: g=>{const r=g.purchaseRevenue>0?g.purchaseRevenue:g.revenue; return r&&g.spend>0?(r/g.spend*100).toFixed(0)+'%':'—';}, afN: a=>a.roas, gaN: g=>{const r=g.purchaseRevenue>0?g.purchaseRevenue:g.revenue; return r&&g.spend>0?r/g.spend*100:null;} },
+  arpu:      { label:'ARPU',           tipTitle:'Avg Revenue Per User', tipBody:'Revenue ÷ Installs. AppsFlyer only — GA has no equivalent user-level metric.',                                                                                       af: a=>a.arpu!=null?'$'+a.arpu.toFixed(4):'—', ga:_=>'—',   afN: a=>a.arpu,       gaN: _=>null, afOnly:true },
+  sessions:  { label:'Purchasers',     tipTitle:'Unique Purchasers',    tipBody:'Unique users who triggered af_purchase event. AppsFlyer only — GA conversion actions count events, not unique users.',                                               af: a=>fmt.num(a.purchasers),ga: _=>'—',                     afN: a=>a.purchasers, gaN: _=>null, afOnly:true },
+};
+
+// ── Get current data slice ────────────────────────────────
+function getSlice(data) {
+  const camp = document.getElementById('campaignFilter').value;
+  const base = data.aggregate[currentOS];
+  if (camp === 'all') return { ga: base.ga, af: base.af };
+  // Filter to specific campaign
+  const c = base.campaigns?.find(x => x.name === camp);
+  return c ? { ga: c.ga, af: c.af } : { ga: base.ga, af: base.af };
+}
+
+// ── Build metrics table ───────────────────────────────────
+function buildMetricsTable(ga, af) {
+  const rows = [...activeMetrics].map(key => {
+    const d = METRIC_DEFS[key]; if (!d) return '';
+    const afV = d.af(af), gaV = d.ga(ga), afN = d.afN(af), gaN = d.gaN(ga);
+    const diffCell = d.afOnly ? '<span class="diff neutral">—</span>' : diff(afN, gaN);
+    const gaCell   = d.afOnly ? `<td style="color:var(--muted);font-style:italic">AF only</td>` : `<td>${gaV}</td>`;
+    return `<tr>
+      <td><div class="metric-name">${d.label}${tip(d.tipTitle, d.tipBody)}</div></td>
+      <td>${afV}</td>
+      ${gaCell}
+      <td>${diffCell}</td>
+    </tr>`;
+  }).join('');
+
+  if (!rows) return '<p style="padding:16px;color:var(--muted);font-size:12px">No metrics selected — use the toggles above.</p>';
+  return `<div class="metrics-table"><table>
+    <thead><tr><th style="width:30%">Metric</th><th>AppsFlyer</th><th>Google Ads</th><th>Diff</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+// ── Weekly grouping ───────────────────────────────────────
+function toMonday(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDay(), diff = day===0?-6:1-day;
+  const mon = new Date(d); mon.setDate(d.getDate()+diff);
+  return mon.toISOString().split('T')[0];
+}
+
+function groupDaysByWeek(days) {
+  const weeks = {};
+  for (const day of days) {
+    const key = toMonday(day.date);
+    if (!weeks[key]) weeks[key] = { key, days:[], ga:{ spend:0,clicks:0,impressions:0,conversions:0,purchases:0,purchaseRevenue:0,revenue:0,cpm:null,cpa:null,ctr:null,cvr:null }, af:{ spend:0,clicks:0,impressions:0,installs:0,purchases:0,purchasers:0,revenue:0,cpm:null,ecpi:null,ctr:null,cvr:null,roas:null,arpu:null } };
+    weeks[key].days.push(day.date);
+    const s = day[currentOS] || day.all;
+    weeks[key].ga.spend           += s.ga.spend||0;
+    weeks[key].ga.clicks          += s.ga.clicks||0;
+    weeks[key].ga.impressions     += s.ga.impressions||0;
+    weeks[key].ga.conversions     += s.ga.conversions||0;
+    weeks[key].ga.purchases       += s.ga.purchases||0;
+    weeks[key].ga.purchaseRevenue += s.ga.purchaseRevenue||0;
+    weeks[key].ga.revenue         += s.ga.revenue||0;
+    weeks[key].af.spend           += s.af.spend||0;
+    weeks[key].af.clicks          += s.af.clicks||0;
+    weeks[key].af.impressions     += s.af.impressions||0;
+    weeks[key].af.installs        += s.af.installs||0;
+    weeks[key].af.purchases       += s.af.purchases||0;
+    weeks[key].af.purchasers      += s.af.purchasers||0;
+    weeks[key].af.revenue         += s.af.revenue||0;
+  }
+  // Recompute rates for each week
+  for (const w of Object.values(weeks)) {
+    const g=w.ga, a=w.af;
+    g.cpm = g.impressions>0 ? (g.spend/g.impressions)*1000 : null;
+    g.cpa = g.conversions>0 ? g.spend/g.conversions : null;
+    g.ctr = g.impressions>0 ? (g.clicks/g.impressions)*100 : null;
+    g.cvr = g.clicks>0 ? (g.conversions/g.clicks)*100 : null;
+    a.cpm = a.impressions>0 ? (a.spend/a.impressions)*1000 : null;
+    a.ecpi= a.installs>0 ? a.spend/a.installs : null;
+    a.ctr = a.impressions>0 ? (a.clicks/a.impressions)*100 : null;
+    a.cvr = a.clicks>0 ? (a.installs/a.clicks)*100 : null;
+    a.roas= a.spend>0 ? (a.revenue/a.spend)*100 : null;
+    a.arpu= a.installs>0 ? a.revenue/a.installs : null;
+  }
+  return Object.values(weeks).sort((a,b)=>b.key.localeCompare(a.key));
+}
+
+// ── Build timeline ────────────────────────────────────────
+function buildTimeline(days) {
+  // Column spec: { key, label, class, afFmt, gaFmt }
+  const cols = [];
+  const TIMELINE_COLS = {
+    spend:     { label:'Spend',      afFmt: a=>fmt.money(a.spend),     gaFmt: g=>fmt.money(g.spend),       cls:'af-col', gaCls:'ga-col' },
+    installs:  { label:'Conv / Inst',afFmt: a=>fmt.num(a.installs),    gaFmt: g=>fmt.num(g.conversions),   cls:'af-col', gaCls:'ga-col' },
+    cpm:       { label:'CPM',        afFmt: a=>fmt.money(a.cpm),       gaFmt: g=>fmt.money(g.cpm),         cls:'af-col', gaCls:'ga-col' },
+    cpi:       { label:'CPI / CPA',  afFmt: a=>fmt.money(a.ecpi),      gaFmt: g=>fmt.money(g.cpa),         cls:'af-col', gaCls:'ga-col' },
+    ctr:       { label:'CTR',        afFmt: a=>fmt.pct(a.ctr),         gaFmt: g=>fmt.pct(g.ctr),           cls:'af-col', gaCls:'ga-col' },
+    cvr:       { label:'CVR',        afFmt: a=>fmt.pct(a.cvr),         gaFmt: g=>fmt.pct(g.cvr),           cls:'af-col', gaCls:'ga-col' },
+    purchases: { label:'Purchases',  afFmt: a=>fmt.num(a.purchases),   gaFmt: g=>fmt.num(g.purchases),                                                                         cls:'af-col', gaCls:'ga-col' },
+    revenue:   { label:'Revenue',    afFmt: a=>fmt.money(a.revenue),   gaFmt: g=>fmt.money(g.purchaseRevenue>0?g.purchaseRevenue:g.revenue),                                cls:'af-col', gaCls:'ga-col' },
+    roas:      { label:'ROAS',       afFmt: a=>a.roas!=null?a.roas.toFixed(0)+'%':'—', gaFmt: g=>{const r=g.purchaseRevenue>0?g.purchaseRevenue:g.revenue; return r&&g.spend>0?(r/g.spend*100).toFixed(0)+'%':'—';}, cls:'af-col', gaCls:'ga-col' },
+    arpu:      { label:'ARPU',       afFmt: a=>a.arpu!=null?'$'+a.arpu.toFixed(4):'—', gaFmt:_=>'—',       cls:'af-col', gaCls:'derived-col', afOnly:true },
+    sessions:  { label:'Purchasers', afFmt: a=>fmt.num(a.purchasers),  gaFmt: _=>'—',                      cls:'af-col', gaCls:'derived-col', afOnly:true },
+  };
+
+  for (const key of activeMetrics) {
+    const c = TIMELINE_COLS[key]; if (!c) continue;
+    cols.push({ ...c, key, header: c.afOnly ? `${c.label} (AF)` : `AF ${c.label}` });
+    if (!c.afOnly) cols.push({ ...c, key, header: `GA ${c.label}`, isGA: true });
+  }
+
+  if (!cols.length) return '';
+
+  const thead = `<tr><th>Date</th>${cols.map(c=>`<th class="${c.isGA?(c.gaCls||'ga-col'):c.cls}">${c.header}</th>`).join('')}</tr>`;
+
+  const isWeek = currentView === 'week';
+  const rows   = isWeek ? groupDaysByWeek(days) : days;
+
+  const tbodyRows = rows.map(row => {
+    const dateStr = isWeek
+      ? 'Wk ' + row.key.slice(5)
+      : new Date(row.date+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    const s = isWeek ? row : (row[currentOS] || row.all);
+    const cells = cols.map(c => {
+      const val = c.isGA ? c.gaFmt(s.ga) : c.afFmt(s.af);
+      return `<td>${val}</td>`;
+    }).join('');
+    return `<tr><td class="date-cell">${dateStr}</td>${cells}</tr>`;
+  }).join('');
+
+  return `<div class="timeline-wrap"><table><thead>${thead}</thead><tbody>${tbodyRows}</tbody></table></div>`;
+}
+
+// ── Render ───────────────────────────────────────────────
+function render(data) {
+  const slice = getSlice(data);
+  let html = '';
+
+  html += '<div class="section-hd">Key Metrics</div>';
+  html += buildMetricsTable(slice.ga, slice.af);
+  html += '<div class="hint">⚠ red = ≥10% difference &nbsp;·&nbsp; hover metric name for details</div>';
+
+  html += `<div class="section-hd" style="margin-top:24px;display:flex;align-items:center;gap:8px">
+    Timeline
+    <div class="btn-group" style="margin-left:auto">
+      <button class="btn ${currentView==='day'?'active':''}" onclick="setView('day',this)">Day</button>
+      <button class="btn ${currentView==='week'?'active':''}" onclick="setView('week',this)">Week</button>
+    </div>
+  </div>`;
+  html += buildTimeline(data.days);
+
+  document.getElementById('main').innerHTML = html;
+}
+
+// ── Controls ─────────────────────────────────────────────
+function setOS(os, btn) {
+  currentOS = os;
+  document.querySelectorAll('#osFilter .btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if (reportData) render(reportData);
+}
+
+function setView(v, btn) {
+  currentView = v;
+  // update buttons if called from toggle (btn may be null on init)
+  if (reportData) render(reportData);
+}
+
+function localDateStr(d) {
+  // Returns YYYY-MM-DD in local timezone (avoids UTC shift on toISOString)
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function setPreset(days, btn) {
+  document.querySelectorAll('#presetFilter .btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const to   = new Date(Date.now()-86400000);
+  const from = new Date(to-(days-1)*86400000);
+  document.getElementById('toDate').value   = localDateStr(to);
+  document.getElementById('fromDate').value = localDateStr(from);
+  loadReport();
+}
+
+function initDates() {
+  const to   = new Date(Date.now()-86400000);
+  const from = new Date(to-13*86400000);
+  document.getElementById('toDate').value   = localDateStr(to);
+  document.getElementById('fromDate').value = localDateStr(from);
+}
+
+// ── Load ─────────────────────────────────────────────────
+async function loadReport(forceRefresh = false) {
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  const btn  = document.getElementById('refreshBtn');
+  const tag  = document.getElementById('cacheTag');
+  btn.disabled = true;
+  tag.style.display = 'none';
+  document.getElementById('main').innerHTML='<div class="state"><div class="icon">⏳</div><p>Loading…</p></div>';
+  try {
+    const url  = `/api/report?from=${from}&to=${to}${forceRefresh ? '&refresh=1' : ''}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error||'Unknown error');
+    if (data._afDebug) console.log('[AF debug]', data._afDebug);
+    reportData = data;
+    if (data._fromDB) {
+      tag.textContent = `💾 from local DB`;
+      tag.style.display = 'inline';
+    } else {
+      tag.textContent = `🔄 fetched live`;
+      tag.style.display = 'inline';
+      setTimeout(() => tag.style.display = 'none', 4000);
+    }
+    if (data._afDebug) console.log('[AF debug]', data._afDebug);
+
+    // Populate campaign dropdown
+    const sel = document.getElementById('campaignFilter');
+    sel.innerHTML = '<option value="all">All Campaigns</option>' +
+      data.campaignNames.map(n=>`<option value="${n}">${n}</option>`).join('');
+    sel.onchange = () => render(data);
+
+    render(data);
+  } catch(err) {
+    document.getElementById('main').innerHTML=`<div class="error-msg">❌ ${err.message}</div><div class="state"><p>Check server console for details.</p></div>`;
+  } finally { btn.disabled=false; }
+}
+
+initDates();
+loadReport();
+</script>
+</body>
+</html>

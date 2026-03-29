@@ -1,0 +1,13 @@
+{
+  "name": "urban-heat-dashboard",
+  "version": "1.0.0",
+  "description": "Google Ads vs AppsFlyer daily dashboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0"
+  }
+}
