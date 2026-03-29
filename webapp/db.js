@@ -129,4 +129,4 @@ async function getAFByDate(from, to) {
   return { android, ios };
 }
 
-module.exports = { getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate };
+module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate };

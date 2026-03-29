@@ -353,11 +353,21 @@ app.get('/api/report', async (req, res) => {
       const afDayAll   = { byCampaign: mergeAFData(afAndroid.byDate[date]?.byCampaign||{}, afIos.byDate[date]?.byCampaign||{}), total:(afAndroid.byDate[date]?.total||0)+(afIos.byDate[date]?.total||0) };
       const afDayDroid = afAndroid.byDate[date] || { byCampaign:{}, total:0 };
       const afDayIos   = afIos.byDate[date]     || { byCampaign:{}, total:0 };
+      const campaigns  = {};
+      for (const name of campaignNames) {
+        const gaC = { [name]: gaDay[name] || {} };
+        campaigns[name] = {
+          all:     computeMetrics(gaC, { [name]: afDayAll.byCampaign[name]   || {} }, afDayAll.byCampaign[name]?.installs   || 0),
+          android: computeMetrics(gaC, { [name]: afDayDroid.byCampaign[name] || {} }, afDayDroid.byCampaign[name]?.installs || 0),
+          ios:     computeMetrics(gaC, { [name]: afDayIos.byCampaign[name]   || {} }, afDayIos.byCampaign[name]?.installs   || 0),
+        };
+      }
       return {
         date,
         all:     computeMetrics(gaDay, afDayAll.byCampaign,   afDayAll.total),
         android: computeMetrics(gaDay, afDayDroid.byCampaign, afDayDroid.total),
         ios:     computeMetrics(gaDay, afDayIos.byCampaign,   afDayIos.total),
+        campaigns,
       };
     });
 

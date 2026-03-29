@@ -1,20 +1,12 @@
-const { MongoClient, ObjectId } = require('mongodb');
-
-let _db = null;
-async function getDb() {
-  if (_db) return _db;
-  const client = new MongoClient(process.env.UA_GOAT_MONGODB_URI);
-  await client.connect();
-  _db = client.db('ua_automation');
-  return _db;
-}
+const { ObjectId } = require('mongodb');
+const { connect } = require('../db');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const db  = await getDb();
+    const db  = await connect();
     const col = db.collection('notes');
 
     if (req.method === 'GET') {

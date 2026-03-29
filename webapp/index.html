@@ -25,8 +25,9 @@ select:focus{border-color:var(--accent)}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.icon{padding:5px 9px;font-size:14px}
-input[type=date]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:12px;outline:none}
+input[type=date]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:12px;outline:none;cursor:pointer}
 input[type=date]:focus{border-color:var(--accent)}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.8);cursor:pointer;opacity:1}
 
 /* ── Metric toggles ── */
 .metric-bar{display:flex;align-items:center;gap:6px;padding:10px 24px;background:var(--surface2);border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -261,11 +262,13 @@ function toMonday(dateStr) {
 
 function groupDaysByWeek(days) {
   const weeks = {};
+  const camp  = document.getElementById('campaignFilter').value;
   for (const day of days) {
     const key = toMonday(day.date);
     if (!weeks[key]) weeks[key] = { key, days:[], ga:{ spend:0,clicks:0,impressions:0,conversions:0,purchases:0,purchaseRevenue:0,revenue:0,cpm:null,cpa:null,ctr:null,cvr:null }, af:{ spend:0,clicks:0,impressions:0,installs:0,purchases:0,purchasers:0,revenue:0,cpm:null,ecpi:null,ctr:null,cvr:null,roas:null,arpu:null } };
     weeks[key].days.push(day.date);
-    const s = day[currentOS] || day.all;
+    const base = (camp !== 'all' && day.campaigns?.[camp]) ? day.campaigns[camp] : day;
+    const s = base[currentOS] || base.all;
     weeks[key].ga.spend           += s.ga.spend||0;
     weeks[key].ga.clicks          += s.ga.clicks||0;
     weeks[key].ga.impressions     += s.ga.impressions||0;
@@ -329,11 +332,13 @@ function buildTimeline(days) {
   const isWeek = currentView === 'week';
   const rows   = isWeek ? groupDaysByWeek(days) : days;
 
+  const camp = document.getElementById('campaignFilter').value;
   const tbodyRows = rows.map(row => {
     const dateStr = isWeek
       ? 'Wk ' + row.key.slice(5)
       : new Date(row.date+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    const s = isWeek ? row : (row[currentOS] || row.all);
+    const base = isWeek ? row : ((camp !== 'all' && row.campaigns?.[camp]) ? row.campaigns[camp] : row);
+    const s = isWeek ? row : (base[currentOS] || base.all);
     const cells = cols.map(c => {
       const val = c.isGA ? c.gaFmt(s.ga) : c.afFmt(s.af);
       return `<td>${val}</td>`;
@@ -440,6 +445,11 @@ async function loadReport(forceRefresh = false) {
 }
 
 initDates();
+['fromDate','toDate'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function() {
+    try { this.showPicker(); } catch(_) {}
+  });
+});
 loadReport();
 
 // ── Page navigation ───────────────────────────────────────
