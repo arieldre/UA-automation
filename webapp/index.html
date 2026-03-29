@@ -77,6 +77,29 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
 .state .icon{font-size:36px;margin-bottom:10px}
 .error-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:14px 18px;color:var(--red);margin-bottom:16px;font-size:13px}
 .hint{font-size:11px;color:var(--muted);margin-top:6px}
+
+/* ── Notes page ── */
+.page{display:none}.page.active{display:block}
+.nav-tabs{display:flex;gap:4px;margin-left:auto}
+.nav-tab{background:none;border:1px solid var(--border);color:var(--muted);padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s}
+.nav-tab:hover{border-color:var(--accent);color:var(--accent)}
+.nav-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.notes-wrap{max-width:720px;margin:32px auto;padding:0 24px}
+.notes-form{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px}
+.notes-form h2{font-size:14px;font-weight:600;margin-bottom:14px;color:var(--text)}
+.notes-form textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 14px;font-size:13px;resize:vertical;min-height:100px;outline:none;font-family:inherit}
+.notes-form textarea:focus{border-color:var(--accent)}
+.notes-form input[type=text]{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 14px;font-size:13px;outline:none;font-family:inherit;margin-top:8px}
+.notes-form input[type=text]:focus{border-color:var(--accent)}
+.notes-form .row{display:flex;gap:8px;margin-top:10px;align-items:center}
+.notes-form .submit{background:var(--accent);border:none;color:#fff;padding:8px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:500}
+.notes-form .submit:hover{opacity:.88}
+.notes-form .submit:disabled{opacity:.5;cursor:not-allowed}
+.note-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:10px;position:relative}
+.note-card .note-text{font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.note-card .note-meta{font-size:11px;color:var(--muted);margin-top:8px}
+.note-card .note-del{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:2px 4px;border-radius:4px}
+.note-card .note-del:hover{color:var(--red)}
 </style>
 </head>
 <body>
@@ -102,6 +125,10 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
   <input type="date" id="toDate">
   <button class="btn icon" id="refreshBtn" onclick="loadReport(true)" title="Force refresh from API">↻</button>
   <span id="cacheTag" style="display:none;font-size:11px;color:var(--muted);white-space:nowrap"></span>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('dashboard',this)">Dashboard</button>
+    <button class="nav-tab" onclick="showPage('notes',this)">📝 Notes</button>
+  </div>
 </div>
 
 <!-- Metric toggles -->
@@ -120,9 +147,26 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
   <button class="chip"     data-metric="sessions">Purchasers</button>
 </div>
 
-<main id="main">
-  <div class="state"><div class="icon">⏳</div><p>Loading…</p></div>
-</main>
+<div id="page-dashboard" class="page active">
+  <main id="main">
+    <div class="state"><div class="icon">⏳</div><p>Loading…</p></div>
+  </main>
+</div>
+
+<div id="page-notes" class="page">
+  <div class="notes-wrap">
+    <div class="notes-form">
+      <h2>Leave a note / improvement idea</h2>
+      <textarea id="noteText" placeholder="Write your note here…"></textarea>
+      <input type="text" id="noteAuthor" placeholder="Your name (optional)">
+      <div class="row">
+        <button class="submit" id="noteSubmit" onclick="submitNote()">Post Note</button>
+        <span id="noteStatus" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+    </div>
+    <div id="notesList"><div class="state"><div class="icon">⏳</div><p>Loading notes…</p></div></div>
+  </div>
+</div>
 
 <script>
 // ── State ────────────────────────────────────────────────
@@ -397,6 +441,74 @@ async function loadReport(forceRefresh = false) {
 
 initDates();
 loadReport();
+
+// ── Page navigation ───────────────────────────────────────
+function showPage(page, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  btn.classList.add('active');
+
+  // Hide dashboard-only controls when on notes
+  const dashOnly = document.querySelector('.metric-bar');
+  dashOnly.style.display = page === 'dashboard' ? '' : 'none';
+
+  if (page === 'notes') loadNotes();
+}
+
+// ── Notes ─────────────────────────────────────────────────
+async function loadNotes() {
+  const list = document.getElementById('notesList');
+  try {
+    const res   = await fetch('/api/notes');
+    const notes = await res.json();
+    if (!notes.length) {
+      list.innerHTML = '<div class="state"><p style="color:var(--muted)">No notes yet — be the first to leave one!</p></div>';
+      return;
+    }
+    list.innerHTML = notes.map(n => {
+      const date = new Date(n.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      return `<div class="note-card">
+        <button class="note-del" onclick="deleteNote('${n._id}')" title="Delete">×</button>
+        <div class="note-text">${n.text.replace(/</g,'&lt;')}</div>
+        <div class="note-meta">${n.author} · ${date}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="error-msg">Failed to load notes: ${e.message}</div>`;
+  }
+}
+
+async function submitNote() {
+  const text   = document.getElementById('noteText').value;
+  const author = document.getElementById('noteAuthor').value;
+  const btn    = document.getElementById('noteSubmit');
+  const status = document.getElementById('noteStatus');
+  if (!text.trim()) { status.textContent = 'Please write something first.'; return; }
+  btn.disabled = true;
+  status.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, author })
+    });
+    if (!res.ok) throw new Error((await res.json()).error);
+    document.getElementById('noteText').value   = '';
+    document.getElementById('noteAuthor').value = '';
+    status.textContent = '✓ Note saved!';
+    setTimeout(() => status.textContent = '', 3000);
+    loadNotes();
+  } catch(e) {
+    status.textContent = '❌ ' + e.message;
+  } finally { btn.disabled = false; }
+}
+
+async function deleteNote(id) {
+  if (!confirm('Delete this note?')) return;
+  await fetch('/api/notes?id=' + id, { method: 'DELETE' });
+  loadNotes();
+}
 </script>
 </body>
 </html>
