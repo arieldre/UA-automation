@@ -4,6 +4,8 @@ const {
   APPSFLYER_TOKEN, APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID
 } = process.env;
 
+const { getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate } = require('../db');
+
 async function getAccessToken() {
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -53,14 +55,22 @@ async function fetchAppsFlyer(appId, from, to) {
   const r = await fetch(`https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_by_date_report/v5?from=${from}&to=${to}&media_source=googleadwords_int&category=standard`, {
     headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` }
   });
-  return r.text();
+  const text = await r.text();
+  if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
+    return { _afError: `HTTP ${r.status} — non-CSV response: ${text.substring(0, 200)}` };
+  }
+  if (!r.ok) return { _afError: `HTTP ${r.status}: ${text.substring(0, 200)}` };
+  const lineCount = text.trim().split('\n').filter(l => l.trim()).length;
+  return { _afDebug: `HTTP ${r.status} — ${lineCount} lines`, _csv: text };
 }
 
 function parseAF(raw) {
-  const csv = typeof raw === 'string' ? raw : JSON.stringify(raw);
+  if (raw && raw._afError) return { byDate:{}, aggregate:{ total:0, byCampaign:{} }, _debug: raw._afError };
+  const csv = raw && raw._csv ? raw._csv : (typeof raw === 'string' ? raw : JSON.stringify(raw));
+  const _debug = raw && raw._afDebug ? raw._afDebug : null;
   const lines = csv.trim().split('\n').filter(l => l.trim());
-  if (lines.length < 2) return { byDate: {}, aggregate: { total: 0, byCampaign: {} } };
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  if (lines.length < 2) return { byDate:{}, aggregate:{ total:0, byCampaign:{} }, _debug: (_debug||'') + ' — 0 data rows' };
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
   const idx = n => headers.indexOf(n);
   const dateIdx       = idx('Date');
   const campIdx       = idx('Campaign (c)') !== -1 ? idx('Campaign (c)') : idx('Campaign');
@@ -75,7 +85,7 @@ function parseAF(raw) {
   const purchasersIdx = idx('af_purchase (Unique users)');
   const purchaseRevIdx= idx('af_purchase (Sales in USD)');
 
-  const zero = () => ({ installs: 0, clicks: 0, impressions: 0, cost: 0, revenue: 0, ecpi: 0, roi: 'N/A', purchases: 0, purchasers: 0, purchaseRev: 0 });
+  const zero = () => ({ installs:0, clicks:0, impressions:0, cost:0, revenue:0, ecpi:0, roi:'N/A', purchases:0, purchasers:0, purchaseRev:0 });
   const add = (obj, camp, vals) => {
     if (!obj[camp]) obj[camp] = zero();
     obj[camp].installs    += parseInt(vals[installsIdx]    || 0);
@@ -87,27 +97,37 @@ function parseAF(raw) {
     obj[camp].roi          = vals[roiIdx] || 'N/A';
     if (purchasesIdx  !== -1) obj[camp].purchases   += parseInt(vals[purchasesIdx]    || 0);
     if (purchasersIdx !== -1) obj[camp].purchasers  += parseInt(vals[purchasersIdx]   || 0);
-    if (purchaseRevIdx !== -1) obj[camp].purchaseRev += parseFloat(vals[purchaseRevIdx] || 0);
+    if (purchaseRevIdx!== -1) obj[camp].purchaseRev += parseFloat(vals[purchaseRevIdx]|| 0);
   };
-  const byDate = {}, aggregate = { total: 0, byCampaign: {} };
+  const splitCSV = line => {
+    const out = []; let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { out.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  };
+  const byDate = {}, aggregate = { total:0, byCampaign:{} };
   for (const line of lines.slice(1)) {
-    const vals = line.split(',').map(v => v.trim().replace(/"/g, ''));
+    const vals = splitCSV(line);
     const camp = vals[campIdx] || 'Unknown';
     const date = dateIdx !== -1 ? vals[dateIdx] : null;
     if (date) {
-      if (!byDate[date]) byDate[date] = { total: 0, byCampaign: {} };
+      if (!byDate[date]) byDate[date] = { total:0, byCampaign:{} };
       add(byDate[date].byCampaign, camp, vals);
       byDate[date].total += parseInt(vals[installsIdx] || 0);
     }
     add(aggregate.byCampaign, camp, vals);
     aggregate.total += parseInt(vals[installsIdx] || 0);
   }
-  return { byDate, aggregate };
+  return { byDate, aggregate, _debug };
 }
 
 function mergeAFData(a, b) {
   const merged = {};
-  const zero = () => ({ installs: 0, clicks: 0, impressions: 0, cost: 0, revenue: 0, ecpi: 0, roi: 'N/A', purchases: 0, purchasers: 0, purchaseRev: 0 });
+  const zero = () => ({ installs:0, clicks:0, impressions:0, cost:0, revenue:0, ecpi:0, roi:'N/A', purchases:0, purchasers:0, purchaseRev:0 });
   for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
     const x = a[k] || zero(), y = b[k] || zero();
     merged[k] = {
@@ -164,15 +184,15 @@ function aggregateGA(byDate) {
   for (const day of Object.values(byDate)) {
     for (const [name, m] of Object.entries(day)) {
       if (!agg[name]) agg[name] = { spend:0, clicks:0, impressions:0, conversions:0, revenue:0, allConversions:0, allRevenue:0, purchases:0, purchaseRevenue:0, _cpmSum:0, _impCount:0 };
-      agg[name].spend           += m.spend;
-      agg[name].clicks          += m.clicks;
-      agg[name].impressions     += m.impressions;
-      agg[name].conversions     += m.conversions;
-      agg[name].revenue         += m.revenue;
-      agg[name].allConversions  += m.allConversions;
-      agg[name].allRevenue      += m.allRevenue;
-      agg[name].purchases       += m.purchases;
-      agg[name].purchaseRevenue += m.purchaseRevenue;
+      agg[name].spend          += m.spend;
+      agg[name].clicks         += m.clicks;
+      agg[name].impressions    += m.impressions;
+      agg[name].conversions    += m.conversions;
+      agg[name].revenue        += m.revenue;
+      agg[name].allConversions += m.allConversions;
+      agg[name].allRevenue     += m.allRevenue;
+      agg[name].purchases      += m.purchases;
+      agg[name].purchaseRevenue+= m.purchaseRevenue;
       if (m.cpm != null) { agg[name]._cpmSum += m.cpm * m.impressions; agg[name]._impCount += m.impressions; }
     }
   }
@@ -236,19 +256,35 @@ module.exports = async function handler(req, res) {
     const defaultFrom = new Date(today - 14 * 86400000).toISOString().split('T')[0];
     const from = req.query.from || defaultFrom;
     const to   = req.query.to   || defaultTo;
+    const forceRefresh = !!req.query.refresh;
 
-    const token = await getAccessToken();
-    const [adsData, adsPurchases, csvAndroid, csvIos] = await Promise.all([
-      fetchGoogleAds(from, to, token),
-      fetchGoogleAdsPurchases(from, to, token),
-      fetchAppsFlyer(APPSFLYER_ANDROID_APP_ID, from, to),
-      fetchAppsFlyer(APPSFLYER_IOS_APP_ID, from, to)
-    ]);
+    const missing = forceRefresh ? getDatesInRange(from, to) : await getMissingDates(from, to);
+    let afDebug = null;
 
-    const afAndroid = parseAF(csvAndroid);
-    const afIos     = parseAF(csvIos);
-    const gaByDate  = processGAResults(adsData.results || [], adsPurchases.results || []);
-    const gaAgg     = aggregateGA(gaByDate);
+    if (missing.length > 0) {
+      const fetchFrom = missing[0];
+      const fetchTo   = missing[missing.length - 1];
+
+      const token = await getAccessToken();
+      const [adsData, adsPurchases, rawAndroid, rawIos] = await Promise.all([
+        fetchGoogleAds(fetchFrom, fetchTo, token),
+        fetchGoogleAdsPurchases(fetchFrom, fetchTo, token),
+        fetchAppsFlyer(APPSFLYER_ANDROID_APP_ID, fetchFrom, fetchTo),
+        fetchAppsFlyer(APPSFLYER_IOS_APP_ID, fetchFrom, fetchTo)
+      ]);
+
+      const afAndroid = parseAF(rawAndroid);
+      const afIos     = parseAF(rawIos);
+      afDebug = { android: afAndroid._debug, ios: afIos._debug };
+
+      const gaByDateFetched = processGAResults(adsData.results || [], adsPurchases.results || []);
+      await storeGAByDate(gaByDateFetched, fetchFrom, fetchTo);
+      await storeAFByDate(afAndroid.byDate, afIos.byDate, fetchFrom, fetchTo);
+    }
+
+    const gaByDate = await getGAByDate(from, to);
+    const { android: afAndroid, ios: afIos } = await getAFByDate(from, to);
+    const gaAgg = aggregateGA(gaByDate);
 
     const campaignNames = [...new Set([
       ...Object.keys(gaAgg),
@@ -265,7 +301,7 @@ module.exports = async function handler(req, res) {
       const gaDay      = gaByDate[date] || {};
       const afDayAll   = { byCampaign: mergeAFData(afAndroid.byDate[date]?.byCampaign||{}, afIos.byDate[date]?.byCampaign||{}), total:(afAndroid.byDate[date]?.total||0)+(afIos.byDate[date]?.total||0) };
       const afDayDroid = afAndroid.byDate[date] || { byCampaign:{}, total:0 };
-      const afDayIos   = afIos.byDate[date] || { byCampaign:{}, total:0 };
+      const afDayIos   = afIos.byDate[date]     || { byCampaign:{}, total:0 };
       return {
         date,
         all:     computeMetrics(gaDay, afDayAll.byCampaign,   afDayAll.total),
@@ -281,7 +317,7 @@ module.exports = async function handler(req, res) {
       ios:     { ...computeMetrics(gaAgg, afIos.aggregate.byCampaign, afIos.aggregate.total), campaigns: buildCampaignList(gaAgg, afIos.aggregate.byCampaign) }
     };
 
-    res.json({ from, to, campaignNames, aggregate, days });
+    res.json({ from, to, campaignNames, aggregate, days, _fromDB: missing.length === 0, _afDebug: afDebug });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

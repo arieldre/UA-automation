@@ -1,25 +1,18 @@
-// Flat-file JSON store — one file per YYYY-MM, stored in ./data/
-// No native dependencies, works on any Node version.
+// MongoDB store — collection: daily_data, _id = YYYY-MM-DD
+require('dotenv').config();
+const { MongoClient } = require('mongodb');
+const { attachDatabasePool } = require('@vercel/functions');
 
-const fs   = require('fs');
-const path = require('path');
+const uri = process.env.UA_GOAT_MONGODB_URI;
+let _client = null, _db = null;
 
-const DATA_DIR = path.join(__dirname, 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
-
-// ── File helpers ──────────────────────────────────────────
-
-function monthFile(date) {
-  return path.join(DATA_DIR, date.slice(0, 7) + '.json'); // e.g. data/2026-03.json
-}
-
-function loadMonth(date) {
-  const f = monthFile(date);
-  try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; }
-}
-
-function saveMonth(date, data) {
-  fs.writeFileSync(monthFile(date), JSON.stringify(data));
+async function connect() {
+  if (_db) return _db;
+  _client = new MongoClient(uri);
+  attachDatabasePool(_client);
+  await _client.connect();
+  _db = _client.db('ua_automation');
+  return _db;
 }
 
 // ── Date range helpers ────────────────────────────────────
@@ -40,71 +33,79 @@ function getDatesInRange(from, to) {
   return dates;
 }
 
-function getMissingDates(from, to) {
-  return getDatesInRange(from, to).filter(date => {
-    const m = loadMonth(date);
-    return !m[date] || !m[date].ga || !m[date].af;
-  });
+async function getMissingDates(from, to) {
+  const db    = await connect();
+  const dates = getDatesInRange(from, to);
+  const docs  = await db.collection('daily_data')
+    .find({ _id: { $in: dates }, ga: { $ne: null }, af: { $ne: null } })
+    .project({ _id: 1 })
+    .toArray();
+  const have = new Set(docs.map(d => d._id));
+  return dates.filter(d => !have.has(d));
 }
 
 // ── Write ─────────────────────────────────────────────────
 
-function storeGAByDate(gaByDate, fetchFrom, fetchTo) {
-  const allDates = getDatesInRange(fetchFrom, fetchTo);
-  // Group by month to minimise file writes
-  const byMonth = {};
-  for (const date of allDates) {
-    const mo = date.slice(0, 7);
-    if (!byMonth[mo]) byMonth[mo] = loadMonth(date);
-    if (!byMonth[mo][date]) byMonth[mo][date] = {};
-    byMonth[mo][date].ga = gaByDate[date] || null; // null = fetched, no data
-    byMonth[mo][date].fetched_at = new Date().toISOString();
-  }
-  for (const [mo, data] of Object.entries(byMonth)) {
-    fs.writeFileSync(path.join(DATA_DIR, mo + '.json'), JSON.stringify(data));
-  }
+async function storeGAByDate(gaByDate, fetchFrom, fetchTo) {
+  const db  = await connect();
+  const col = db.collection('daily_data');
+  const ops = getDatesInRange(fetchFrom, fetchTo).map(date => ({
+    updateOne: {
+      filter: { _id: date },
+      update: { $set: { ga: gaByDate[date] || null, fetched_at: new Date().toISOString() } },
+      upsert: true
+    }
+  }));
+  await col.bulkWrite(ops);
 }
 
-function storeAFByDate(afAndroidByDate, afIosByDate, fetchFrom, fetchTo) {
-  const allDates = getDatesInRange(fetchFrom, fetchTo);
-  const byMonth = {};
-  for (const date of allDates) {
-    const mo = date.slice(0, 7);
-    if (!byMonth[mo]) byMonth[mo] = loadMonth(date);
-    if (!byMonth[mo][date]) byMonth[mo][date] = {};
-    byMonth[mo][date].af = {
-      android: afAndroidByDate[date] || { total: 0, byCampaign: {} },
-      ios:     afIosByDate[date]     || { total: 0, byCampaign: {} }
-    };
-    byMonth[mo][date].fetched_at = new Date().toISOString();
-  }
-  for (const [mo, data] of Object.entries(byMonth)) {
-    fs.writeFileSync(path.join(DATA_DIR, mo + '.json'), JSON.stringify(data));
-  }
+async function storeAFByDate(afAndroidByDate, afIosByDate, fetchFrom, fetchTo) {
+  const db  = await connect();
+  const col = db.collection('daily_data');
+  const ops = getDatesInRange(fetchFrom, fetchTo).map(date => ({
+    updateOne: {
+      filter: { _id: date },
+      update: {
+        $set: {
+          af: {
+            android: afAndroidByDate[date] || { total: 0, byCampaign: {} },
+            ios:     afIosByDate[date]     || { total: 0, byCampaign: {} }
+          },
+          fetched_at: new Date().toISOString()
+        }
+      },
+      upsert: true
+    }
+  }));
+  await col.bulkWrite(ops);
 }
 
 // ── Read ──────────────────────────────────────────────────
 
-function getGAByDate(from, to) {
+async function getGAByDate(from, to) {
+  const db   = await connect();
+  const docs = await db.collection('daily_data')
+    .find({ _id: { $in: getDatesInRange(from, to) }, ga: { $ne: null } })
+    .toArray();
   const byDate = {};
-  for (const date of getDatesInRange(from, to)) {
-    const entry = loadMonth(date)[date];
-    if (entry?.ga) byDate[date] = entry.ga;
-  }
+  for (const doc of docs) byDate[doc._id] = doc.ga;
   return byDate;
 }
 
-function getAFByDate(from, to) {
+async function getAFByDate(from, to) {
   const zero = () => ({ installs:0, clicks:0, impressions:0, cost:0, revenue:0, ecpi:0, roi:'N/A', purchases:0, purchasers:0, purchaseRev:0 });
   const android = { byDate:{}, aggregate:{ total:0, byCampaign:{} } };
   const ios     = { byDate:{}, aggregate:{ total:0, byCampaign:{} } };
 
-  for (const date of getDatesInRange(from, to)) {
-    const entry = loadMonth(date)[date];
-    if (!entry?.af) continue;
+  const db   = await connect();
+  const docs = await db.collection('daily_data')
+    .find({ _id: { $in: getDatesInRange(from, to) }, af: { $ne: null } })
+    .toArray();
 
+  for (const doc of docs) {
+    const date = doc._id;
     for (const [platform, target] of [['android', android], ['ios', ios]]) {
-      const day = entry.af[platform];
+      const day = doc.af?.[platform];
       if (!day) continue;
       target.byDate[date] = day;
       target.aggregate.total += day.total || 0;

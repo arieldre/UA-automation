@@ -304,7 +304,7 @@ app.get('/api/report', async (req, res) => {
     const forceRefresh = !!req.query.refresh;
 
     // Dates not yet in DB (or all dates if force refresh)
-    const missing = forceRefresh ? getDatesInRange(from, to) : getMissingDates(from, to);
+    const missing = forceRefresh ? getDatesInRange(from, to) : await getMissingDates(from, to);
     let afDebug = null;
 
     if (missing.length > 0) {
@@ -325,16 +325,16 @@ app.get('/api/report', async (req, res) => {
       afDebug = { android: afAndroid._debug, ios: afIos._debug };
 
       const gaByDateFetched = processGAResults(adsData.results || [], adsPurchases.results || []);
-      storeGAByDate(gaByDateFetched, fetchFrom, fetchTo);
-      storeAFByDate(afAndroid.byDate, afIos.byDate, fetchFrom, fetchTo);
+      await storeGAByDate(gaByDateFetched, fetchFrom, fetchTo);
+      await storeAFByDate(afAndroid.byDate, afIos.byDate, fetchFrom, fetchTo);
       console.log(`Stored to DB. AF debug:`, afDebug);
     } else {
       console.log(`All dates in range served from DB`);
     }
 
     // Assemble response from DB
-    const gaByDate = getGAByDate(from, to);
-    const { android: afAndroid, ios: afIos } = getAFByDate(from, to);
+    const gaByDate = await getGAByDate(from, to);
+    const { android: afAndroid, ios: afIos } = await getAFByDate(from, to);
     const gaAgg = aggregateGA(gaByDate);
 
     const campaignNames = [...new Set([
