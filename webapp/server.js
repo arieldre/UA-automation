@@ -3,9 +3,11 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate } = require('./db');
+const { getAccessToken: _getAccessToken, gaQuery: _gaQuery } = require('./lib/google-ads');
 
 
 const app = express();
+app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, APPSFLYER_TOKEN, APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
 let GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
@@ -402,6 +404,12 @@ app.get('/api/debug', (req, res) => {
 });
 
 app.get('/api/facebook', require('./api/facebook'));
+app.get('/api/ads',              require('./api/ads'));
+const rotateHandler = require('./api/rotate');
+app.get('/api/rotate/config',    rotateHandler);
+app.post('/api/rotate/config',   rotateHandler);
+app.delete('/api/rotate/config', rotateHandler);
+app.post('/api/rotate',          rotateHandler);
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.listen(PORT, () => {
   console.log(`\n✅ Dashboard → http://localhost:${PORT}`);

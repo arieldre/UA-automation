@@ -79,6 +79,50 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
 .error-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:14px 18px;color:var(--red);margin-bottom:16px;font-size:13px}
 .hint{font-size:11px;color:var(--muted);margin-top:6px}
 
+/* ── Creatives tab ── */
+#creatives-wrap{max-width:1400px;margin:0 auto;padding:20px 24px 80px}
+.ch-tabs{display:flex;gap:4px;margin-bottom:16px}
+.ch-tab{background:var(--bg);border:1px solid var(--border);color:var(--muted);padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s}
+.ch-tab:hover{border-color:var(--accent);color:var(--accent)}
+.ch-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.camp-block{margin-bottom:24px}
+.camp-hd{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.camp-hd .ch-badge{background:var(--surface2);border:1px solid var(--border);padding:1px 7px;border-radius:4px;font-size:10px;color:var(--muted);text-transform:none;letter-spacing:0}
+.camp-hd .cfg-toggle{font-size:11px;color:var(--accent);text-transform:none;letter-spacing:0;margin-left:auto}
+.rot-cfg{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.rot-cfg label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.rot-cfg select,.rot-cfg input[type=number]{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;outline:none;width:80px}
+.rot-cfg select{width:auto}
+.rot-cfg .save-btn{background:var(--accent);border:none;color:#fff;padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap}
+.rot-cfg .save-btn:hover{opacity:.88}
+.rot-cfg .del-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer}
+.rot-cfg .del-btn:hover{border-color:var(--red);color:var(--red)}
+.ads-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;overflow-x:auto}
+.ads-wrap table{width:100%;border-collapse:collapse;min-width:900px}
+.ads-wrap thead th{padding:8px 12px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.ads-wrap thead th:not(:first-child):not(:nth-child(2)):not(:nth-child(3)):not(:nth-child(4)){text-align:right}
+.ads-wrap thead th.ga-col{color:#60a5fa}
+.ads-wrap thead th.af-col{color:#a78bfa}
+.ads-wrap tbody tr:hover{background:rgba(255,255,255,.02)}
+.ads-wrap tbody td{padding:8px 12px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ads-wrap tbody td:not(:first-child):not(:nth-child(2)):not(:nth-child(3)):not(:nth-child(4)){text-align:right}
+.ads-wrap tbody tr.top-ad{background:rgba(34,197,94,.04)}
+.rank-badge{display:inline-block;background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle}
+.status-en{color:var(--green);font-weight:600}
+.status-pa{color:var(--muted)}
+.below-thresh{color:var(--muted);font-style:italic}
+input.pool-chk{accent-color:var(--accent);width:14px;height:14px;cursor:pointer}
+#rot-action-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:10px;z-index:30}
+#rot-preview-modal{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:50;display:flex;align-items:center;justify-content:center}
+#rot-preview-inner{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:700px;width:92%;max-height:80vh;overflow-y:auto}
+#rot-preview-inner h3{font-size:14px;font-weight:600;margin-bottom:14px}
+.prev-row{padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;flex-direction:column;gap:3px}
+.prev-row:last-child{border-bottom:none}
+.prev-en{color:var(--green)}
+.prev-pa{color:var(--red)}
+.prev-reason{font-size:11px;color:var(--muted)}
+.prev-actions{display:flex;gap:8px;margin-top:16px}
+
 /* ── Facebook section ── */
 #fb-section{max-width:1200px;margin:0 auto;padding:0 24px 32px}
 .fb-account{margin-bottom:20px}
@@ -143,6 +187,7 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
   <span id="cacheTag" style="display:none;font-size:11px;color:var(--muted);white-space:nowrap"></span>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dashboard',this)">Dashboard</button>
+    <button class="nav-tab" onclick="showPage('creatives',this)">🎨 Creatives</button>
     <button class="nav-tab" onclick="showPage('notes',this)">📝 Notes</button>
   </div>
 </div>
@@ -171,6 +216,39 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
     <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:8px;padding:0 0 4px;border-top:1px solid var(--border)">Facebook Ads <span style="color:#60cdff">(read-only test)</span></div>
     <div id="fb-titan" class="fb-account"></div>
     <div id="fb-hitzone" class="fb-account"></div>
+  </div>
+</div>
+
+<div id="page-creatives" class="page">
+  <div id="creatives-wrap">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="ch-tabs" id="chTabs">
+        <button class="ch-tab active" data-ch="ALL" onclick="setChannel('ALL',this)">All</button>
+        <button class="ch-tab" data-ch="SEARCH" onclick="setChannel('SEARCH',this)">Search</button>
+        <button class="ch-tab" data-ch="DISPLAY" onclick="setChannel('DISPLAY',this)">Display</button>
+        <button class="ch-tab" data-ch="VIDEO" onclick="setChannel('VIDEO',this)">YouTube</button>
+      </div>
+      <button class="btn" onclick="loadCreatives()" style="margin-left:auto">↻ Refresh</button>
+      <span id="creatives-status" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+    <div id="creatives-main"><div class="state"><div class="icon">⏳</div><p>Loading ads…</p></div></div>
+  </div>
+  <!-- Sticky action bar -->
+  <div id="rot-action-bar" style="display:none">
+    <button class="btn" onclick="runRotation(true)">Preview Changes</button>
+    <button class="btn" style="background:var(--accent);border-color:var(--accent);color:#fff" onclick="runRotation(false)">Rotate Now</button>
+    <span id="rot-status" style="font-size:12px;color:var(--muted)"></span>
+  </div>
+  <!-- Preview modal -->
+  <div id="rot-preview-modal" style="display:none">
+    <div id="rot-preview-inner">
+      <h3>Rotation Preview</h3>
+      <div id="rot-preview-content"></div>
+      <div class="prev-actions">
+        <button class="btn" style="background:var(--accent);border-color:var(--accent);color:#fff" onclick="applyRotation()">Apply These Changes</button>
+        <button class="btn" onclick="document.getElementById('rot-preview-modal').style.display='none'">Cancel</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -464,6 +542,241 @@ async function loadReport(forceRefresh = false) {
   } finally { btn.disabled=false; }
 }
 
+// ── Creatives Tab ────────────────────────────────────────
+let creativesData   = null;
+let rotConfigs      = {};   // { [campaignId]: config }
+let currentChannel  = 'ALL';
+let pendingPreview  = null;
+let creativesLoaded = false;
+
+function setChannel(ch, btn) {
+  currentChannel = ch;
+  document.querySelectorAll('.ch-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (creativesData) renderCreatives();
+}
+
+async function loadCreatives() {
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  document.getElementById('creatives-main').innerHTML = '<div class="state"><div class="icon">⏳</div><p>Loading ads…</p></div>';
+  document.getElementById('creatives-status').textContent = '';
+  document.getElementById('rot-action-bar').style.display = 'none';
+
+  try {
+    const [adsRes, cfgRes] = await Promise.all([
+      fetch(`/api/ads?from=${from}&to=${to}`),
+      fetch('/api/rotate/config')
+    ]);
+    const adsJson = await adsRes.json();
+    const cfgJson = await cfgRes.json();
+    if (!adsRes.ok) throw new Error(adsJson.error || 'Failed to load ads');
+    creativesData = adsJson;
+    rotConfigs = {};
+    for (const c of (cfgJson || [])) rotConfigs[c.campaignId] = c;
+    renderCreatives();
+    creativesLoaded = true;
+    document.getElementById('creatives-status').textContent = `${adsJson.campaigns?.length || 0} campaigns · ${from} → ${to}`;
+  } catch(err) {
+    document.getElementById('creatives-main').innerHTML = `<div class="error-msg">❌ ${err.message}</div>`;
+  }
+}
+
+function renderCreatives() {
+  if (!creativesData) return;
+  const camps = creativesData.campaigns.filter(c =>
+    currentChannel === 'ALL' || c.channelType === currentChannel
+  );
+  if (!camps.length) {
+    document.getElementById('creatives-main').innerHTML = '<div class="state"><p style="color:var(--muted)">No campaigns for this channel type.</p></div>';
+    return;
+  }
+
+  let hasPool = false;
+  const html = camps.map(camp => {
+    const cfg = rotConfigs[camp.campaignId] || {};
+    const pool = new Set(cfg.poolResourceNames || []);
+    const metric = cfg.rankMetric || 'cpi';
+    const asc    = cfg.rankDirection !== 'desc';
+    const keepN  = cfg.keepTopN ?? 2;
+    const thresh = cfg.minSpendThreshold ?? 20;
+
+    // Sort pool ads by metric for ranking
+    const poolAds = camp.ads.filter(a => pool.has(a.resourceName));
+    const rankable = poolAds.filter(a => a.spend >= thresh && a[metric] != null)
+      .sort((a, b) => asc ? a[metric] - b[metric] : b[metric] - a[metric]);
+    const topRNs = new Set(rankable.slice(0, keepN).map(a => a.resourceName));
+
+    if (pool.size) hasPool = true;
+
+    const chBadge = { SEARCH:'Search', DISPLAY:'Display', VIDEO:'YouTube', UNKNOWN:'Unknown' }[camp.channelType] || camp.channelType;
+
+    const rows = camp.ads.map(ad => {
+      const inPool  = pool.has(ad.resourceName);
+      const isTop   = topRNs.has(ad.resourceName);
+      const below   = inPool && ad.spend < thresh;
+      const rankIdx = rankable.findIndex(a => a.resourceName === ad.resourceName);
+      const badge   = inPool && rankIdx >= 0 ? `<span class="rank-badge">#${rankIdx+1}</span>` : '';
+      const statusCls = ad.status === 'ENABLED' ? 'status-en' : 'status-pa';
+
+      return `<tr class="${isTop ? 'top-ad' : ''}">
+        <td><input type="checkbox" class="pool-chk" ${inPool?'checked':''} onchange="togglePool('${ad.resourceName}','${camp.campaignId}',this.checked)"></td>
+        <td>${escHtml(ad.displayName)}${badge}${below ? ' <span title="Below spend threshold" style="color:var(--muted)">⚠️</span>' : ''}</td>
+        <td style="color:var(--muted);font-size:11px">${escHtml(ad.adGroupName)}</td>
+        <td><span class="${statusCls}">${ad.status === 'ENABLED' ? 'On' : 'Off'}</span></td>
+        <td class="${below?'below-thresh':''}">${ad.spend > 0 ? '$'+ad.spend.toFixed(2) : '—'}</td>
+        <td>${ad.ctr != null ? ad.ctr.toFixed(2)+'%' : '—'}</td>
+        <td>${ad.cpmGA != null ? '$'+ad.cpmGA.toFixed(2) : '—'}</td>
+        <td>${ad.conversions > 0 ? Math.round(ad.conversions) : '—'}</td>
+        <td>${ad.cpa != null ? '$'+ad.cpa.toFixed(2) : '—'}</td>
+        <td>${ad.installs > 0 ? ad.installs : '—'}</td>
+        <td>${ad.cpi != null ? '$'+ad.cpi.toFixed(2) : '—'}</td>
+        <td>${ad.cvrAF != null ? ad.cvrAF.toFixed(2)+'%' : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    const cfgOpen = !!cfg.campaignId;
+    return `<div class="camp-block" id="camp-${camp.campaignId}">
+      <div class="camp-hd" onclick="toggleCfg('${camp.campaignId}')">
+        ${escHtml(camp.campaignName)}
+        <span class="ch-badge">${chBadge}</span>
+        <span class="cfg-toggle">${cfgOpen ? '▼' : '▶'} Config</span>
+      </div>
+      <div id="cfg-${camp.campaignId}" style="display:${cfgOpen?'flex':'none'}">
+        <div class="rot-cfg">
+          <label>Keep top <input type="number" min="1" max="20" value="${keepN}" id="keepN-${camp.campaignId}" style="width:55px"></label>
+          <label>Rank by
+            <select id="metric-${camp.campaignId}">
+              <option value="cpi" ${metric==='cpi'?'selected':''}>AF › CPI</option>
+              <option value="cpa" ${metric==='cpa'?'selected':''}>GA › CPA</option>
+              <option value="ctr" ${metric==='ctr'?'selected':''}>GA › CTR</option>
+              <option value="cvrAF" ${metric==='cvrAF'?'selected':''}>AF › CVR</option>
+              <option value="cvr" ${metric==='cvr'?'selected':''}>GA › CVR</option>
+            </select>
+          </label>
+          <label>Min spend $<input type="number" min="0" value="${thresh}" id="thresh-${camp.campaignId}" style="width:65px"></label>
+          <button class="save-btn" onclick="saveConfig('${camp.campaignId}','${escHtml(camp.campaignName)}')">Save Config</button>
+          ${cfg.campaignId ? `<button class="del-btn" onclick="deleteConfig('${camp.campaignId}')">Remove</button>` : ''}
+        </div>
+      </div>
+      <div class="ads-wrap">
+        <table>
+          <thead><tr>
+            <th>Pool</th><th>Ad</th><th>Ad Group</th><th>Status</th>
+            <th class="ga-col">Spend</th>
+            <th class="ga-col">CTR</th>
+            <th class="ga-col">CPM</th>
+            <th class="ga-col">Conv</th>
+            <th class="ga-col">CPA</th>
+            <th class="af-col">Installs</th>
+            <th class="af-col">CPI</th>
+            <th class="af-col">CVR</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('creatives-main').innerHTML = html;
+  document.getElementById('rot-action-bar').style.display = hasPool ? 'flex' : 'none';
+}
+
+function toggleCfg(campaignId) {
+  const el = document.getElementById(`cfg-${campaignId}`);
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+function togglePool(resourceName, campaignId, checked) {
+  const cfg = rotConfigs[campaignId] || { campaignId, poolResourceNames: [] };
+  if (checked) {
+    if (!cfg.poolResourceNames.includes(resourceName)) cfg.poolResourceNames.push(resourceName);
+  } else {
+    cfg.poolResourceNames = cfg.poolResourceNames.filter(rn => rn !== resourceName);
+  }
+  rotConfigs[campaignId] = cfg;
+  // Save immediately
+  const camp = creativesData?.campaigns.find(c => c.campaignId === campaignId);
+  if (camp) saveConfig(campaignId, camp.campaignName, true);
+  document.getElementById('rot-action-bar').style.display =
+    Object.values(rotConfigs).some(c => c.poolResourceNames?.length) ? 'flex' : 'none';
+}
+
+async function saveConfig(campaignId, campaignName, silent = false) {
+  const keepN  = parseInt(document.getElementById(`keepN-${campaignId}`)?.value  || 2);
+  const metric = document.getElementById(`metric-${campaignId}`)?.value || 'cpi';
+  const thresh = parseFloat(document.getElementById(`thresh-${campaignId}`)?.value || 20);
+  const cfg = rotConfigs[campaignId] || { campaignId, poolResourceNames: [] };
+  const payload = { ...cfg, campaignId, campaignName, keepTopN: keepN, rankMetric: metric,
+    rankDirection: ['cpa','cpi'].includes(metric) ? 'asc' : 'desc',
+    minSpendThreshold: thresh, enabled: true };
+  rotConfigs[campaignId] = payload;
+  try {
+    await fetch('/api/rotate/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    if (!silent) renderCreatives();
+  } catch(e) { if (!silent) alert('Save failed: ' + e.message); }
+}
+
+async function deleteConfig(campaignId) {
+  await fetch(`/api/rotate/config?campaignId=${campaignId}`, { method: 'DELETE' });
+  delete rotConfigs[campaignId];
+  renderCreatives();
+}
+
+async function runRotation(isPreview) {
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  document.getElementById('rot-status').textContent = isPreview ? 'Computing preview…' : 'Applying…';
+  try {
+    const res  = await fetch(`/api/rotate?preview=${isPreview}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ from, to })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    document.getElementById('rot-status').textContent = '';
+
+    if (isPreview) {
+      pendingPreview = data;
+      showPreviewModal(data);
+    } else {
+      const msg = `Applied: ${data.summary.toEnable} enabled, ${data.summary.toPause} paused`;
+      document.getElementById('rot-status').textContent = '✓ ' + msg;
+      loadCreatives();
+    }
+  } catch(err) {
+    document.getElementById('rot-status').textContent = '✗ ' + err.message;
+  }
+}
+
+function showPreviewModal(data) {
+  const { changes, summary } = data;
+  const noChange = `<p style="color:var(--muted);padding:12px 0">No changes needed — ads are already correctly arranged.</p>`;
+  const rows = changes.length ? changes.map(c => {
+    const cls   = c.newStatus === 'ENABLED' ? 'prev-en' : 'prev-pa';
+    const arrow = c.newStatus === 'ENABLED' ? '▲ Enable' : '▼ Pause';
+    return `<div class="prev-row">
+      <div><strong>${escHtml(c.campaignName)}</strong> — ${escHtml(c.displayName)}</div>
+      <div class="${cls}">${arrow}: ${c.currentStatus} → ${c.newStatus}</div>
+      <div class="prev-reason">${escHtml(c.reason)}</div>
+    </div>`;
+  }).join('') : noChange;
+
+  document.getElementById('rot-preview-content').innerHTML = `
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      ${summary.toEnable} to enable · ${summary.toPause} to pause · ${summary.unchanged} unchanged
+    </p>${rows}`;
+  document.getElementById('rot-preview-modal').style.display = 'flex';
+}
+
+async function applyRotation() {
+  document.getElementById('rot-preview-modal').style.display = 'none';
+  await runRotation(false);
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ── Facebook Ads ─────────────────────────────────────────
 function fbMoney(v) { return v == null ? '—' : '$' + v.toFixed(2); }
 function fbNum(v)   { return v == null || v === 0 ? '—' : Math.round(v).toLocaleString(); }
@@ -539,6 +852,9 @@ function showPage(page, btn) {
   dashOnly.style.display = page === 'dashboard' ? '' : 'none';
 
   if (page === 'notes') loadNotes();
+  if (page === 'creatives' && !creativesLoaded) loadCreatives();
+  // Hide rotation action bar when leaving creatives tab
+  if (page !== 'creatives') document.getElementById('rot-action-bar').style.display = 'none';
 }
 
 // ── Notes ─────────────────────────────────────────────────
