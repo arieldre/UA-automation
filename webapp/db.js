@@ -62,21 +62,24 @@ async function storeGAByDate(gaByDate, fetchFrom, fetchTo) {
 async function storeAFByDate(afAndroidByDate, afIosByDate, fetchFrom, fetchTo) {
   const db  = await connect();
   const col = db.collection('daily_data');
-  const ops = getDatesInRange(fetchFrom, fetchTo).map(date => ({
-    updateOne: {
-      filter: { _id: date },
-      update: {
-        $set: {
-          af: {
-            android: afAndroidByDate[date] || { total: 0, byCampaign: {} },
-            ios:     afIosByDate[date]     || { total: 0, byCampaign: {} }
-          },
-          fetched_at: new Date().toISOString()
-        }
-      },
-      upsert: true
-    }
-  }));
+  const ops = getDatesInRange(fetchFrom, fetchTo)
+    .filter(date => afAndroidByDate[date] || afIosByDate[date]) // skip dates with no AF data (rate limit)
+    .map(date => ({
+      updateOne: {
+        filter: { _id: date },
+        update: {
+          $set: {
+            af: {
+              android: afAndroidByDate[date] || { total: 0, byCampaign: {} },
+              ios:     afIosByDate[date]     || { total: 0, byCampaign: {} }
+            },
+            fetched_at: new Date().toISOString()
+          }
+        },
+        upsert: true
+      }
+    }));
+  if (!ops.length) return;
   await col.bulkWrite(ops);
 }
 
