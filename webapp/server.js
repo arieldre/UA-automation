@@ -401,6 +401,7 @@ app.get('/api/debug', (req, res) => {
   }
 });
 
+app.get('/api/facebook', require('./api/facebook'));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.listen(PORT, () => {
   console.log(`\n✅ Dashboard → http://localhost:${PORT}`);

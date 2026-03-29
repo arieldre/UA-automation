@@ -79,6 +79,21 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
 .error-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:14px 18px;color:var(--red);margin-bottom:16px;font-size:13px}
 .hint{font-size:11px;color:var(--muted);margin-top:6px}
 
+/* ── Facebook section ── */
+#fb-section{max-width:1200px;margin:0 auto;padding:0 24px 32px}
+.fb-account{margin-bottom:20px}
+.fb-account-hd{font-size:11px;font-weight:600;color:#60cdff;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;margin-top:20px;display:flex;align-items:center;gap:8px}
+.fb-account-hd .fb-badge{background:rgba(96,205,255,.12);border:1px solid rgba(96,205,255,.25);padding:1px 8px;border-radius:4px;font-size:10px;color:#60cdff}
+.fb-account-hd .fb-error{color:var(--red);font-size:11px;font-weight:400;text-transform:none;letter-spacing:0}
+.fb-table{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;overflow-x:auto}
+.fb-table table{width:100%;border-collapse:collapse;min-width:700px}
+.fb-table thead th{padding:9px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.fb-table thead th:not(:first-child){text-align:right}
+.fb-table tbody tr:hover{background:rgba(255,255,255,.02)}
+.fb-table tbody td{padding:9px 14px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fb-table tbody td:not(:first-child){text-align:right}
+.fb-table tbody tr.fb-total td{border-top:1px solid var(--border);font-weight:600;color:var(--text)}
+
 /* ── Notes page ── */
 .page{display:none}.page.active{display:block}
 .nav-tabs{display:flex;gap:4px;margin-left:auto}
@@ -152,6 +167,11 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
   <main id="main">
     <div class="state"><div class="icon">⏳</div><p>Loading…</p></div>
   </main>
+  <div id="fb-section" style="display:none">
+    <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:8px;padding:0 0 4px;border-top:1px solid var(--border)">Facebook Ads <span style="color:#60cdff">(read-only test)</span></div>
+    <div id="fb-titan" class="fb-account"></div>
+    <div id="fb-hitzone" class="fb-account"></div>
+  </div>
 </div>
 
 <div id="page-notes" class="page">
@@ -444,6 +464,51 @@ async function loadReport(forceRefresh = false) {
   } finally { btn.disabled=false; }
 }
 
+// ── Facebook Ads ─────────────────────────────────────────
+function fbMoney(v) { return v == null ? '—' : '$' + v.toFixed(2); }
+function fbNum(v)   { return v == null || v === 0 ? '—' : Math.round(v).toLocaleString(); }
+function fbPct(v)   { return v == null ? '—' : v.toFixed(2) + '%'; }
+
+function buildFBTable(data) {
+  if (data.error) return `<div class="fb-account-hd"><span class="fb-error">✗ ${data.error}${data.code ? ' (code ' + data.code + ')' : ''}</span></div>`;
+  const rows = [...data.campaigns, { name: 'TOTAL', ...data.total, _total: true }];
+  const body = rows.map(c => `<tr class="${c._total ? 'fb-total' : ''}">
+    <td>${c.name}</td>
+    <td>${fbMoney(c.spend)}</td>
+    <td>${fbNum(c.impressions)}</td>
+    <td>${fbNum(c.clicks)}</td>
+    <td>${fbPct(c.ctr)}</td>
+    <td>${fbMoney(c.cpm)}</td>
+    <td>${fbMoney(c.cpc)}</td>
+    <td>${fbNum(c.installs)}</td>
+    <td>${fbMoney(c.ecpi)}</td>
+    <td>${fbNum(c.purchases)}</td>
+  </tr>`).join('');
+  return `<div class="fb-table"><table>
+    <thead><tr><th>Campaign</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>CTR</th><th>CPM</th><th>CPC</th><th>Installs</th><th>eCPI</th><th>Purchases</th></tr></thead>
+    <tbody>${body}</tbody>
+  </table></div>`;
+}
+
+async function loadFacebook() {
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  const sec  = document.getElementById('fb-section');
+  sec.style.display = 'block';
+  document.getElementById('fb-titan').innerHTML   = '<div style="color:var(--muted);font-size:12px;padding:8px 0">Loading Titan…</div>';
+  document.getElementById('fb-hitzone').innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">Loading HitZone…</div>';
+  try {
+    const res  = await fetch(`/api/facebook?from=${from}&to=${to}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unknown error');
+    document.getElementById('fb-titan').innerHTML   = `<div class="fb-account-hd">Titan <span class="fb-badge">act_${data.titan?.campaigns ? 'OK' : 'ERR'}</span></div>` + buildFBTable(data.titan);
+    document.getElementById('fb-hitzone').innerHTML = `<div class="fb-account-hd">HitZone <span class="fb-badge">act_${data.hitzone?.campaigns ? 'OK' : 'ERR'}</span></div>` + buildFBTable(data.hitzone);
+  } catch(err) {
+    document.getElementById('fb-titan').innerHTML   = `<div class="fb-account-hd"><span class="fb-error">✗ ${err.message}</span></div>`;
+    document.getElementById('fb-hitzone').innerHTML = '';
+  }
+}
+
 initDates();
 (function() {
   const yesterday = localDateStr(new Date(Date.now()-86400000));
@@ -455,10 +520,12 @@ initDates();
       // clamp to yesterday
       if (this.value > yesterday) this.value = yesterday;
       loadReport();
+      loadFacebook();
     });
   });
 })();
 loadReport();
+loadFacebook();
 
 // ── Page navigation ───────────────────────────────────────
 function showPage(page, btn) {
