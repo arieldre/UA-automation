@@ -121,6 +121,7 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
 .modal-subtitle{font-size:11px;color:var(--muted);margin-bottom:20px}
 .asset-section{margin-bottom:24px}
 .asset-section-hd{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.asset-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .asset-table{width:100%;border-collapse:collapse;font-size:12px}
 .asset-table th{padding:7px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
 .asset-table th:not(:first-child){text-align:right}
@@ -685,8 +686,12 @@ function buildAssetsModal(data) {
   const fieldLabel = ft => ft === 'HEADLINE' ? 'Headline' : ft === 'DESCRIPTION' ? 'Description' : ft === 'LONG_HEADLINE' ? 'Long Headline' : ft === 'CALL_TO_ACTION_SELECTION' ? 'CTA' : ft === 'BUSINESS_NAME' ? 'Business Name' : ft || '—';
   let html = '';
 
-  if (assets.video && assets.video.length) {
-    const rows = assets.video.map(a => {
+  const activeVideo = (assets.video || []).filter(a => a.enabled);
+  const activeImage = (assets.image || []).filter(a => a.enabled);
+  const activeText  = (assets.text  || []).filter(a => a.enabled);
+
+  if (activeVideo.length) {
+    const rows = activeVideo.map(a => {
       const thumb = a.youtubeId
         ? `<img class="asset-thumb" src="https://img.youtube.com/vi/${esc(a.youtubeId)}/mqdefault.jpg" loading="lazy">`
         : `<div class="asset-thumb" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">video</div>`;
@@ -705,15 +710,15 @@ function buildAssetsModal(data) {
       </tr>`;
     }).join('');
     html += `<div class="asset-section">
-      <div class="asset-section-hd">Videos (${assets.video.length})</div>
-      <table class="asset-table">
+      <div class="asset-section-hd">Videos (${activeVideo.length})</div>
+      <div class="asset-table-wrap"><table class="asset-table">
         <thead><tr><th style="width:35%">Asset</th><th>Performance</th><th>Format</th><th>Impressions</th><th>Clicks</th><th>Spend</th><th>Conv.</th><th>CPI</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table></div>`;
+      </table></div></div>`;
   }
 
-  if (assets.image && assets.image.length) {
-    const rows = assets.image.map(a => {
+  if (activeImage.length) {
+    const rows = activeImage.map(a => {
       const thumb = a.imageUrl
         ? `<img class="asset-img-thumb" src="${a.imageUrl}" loading="lazy">`
         : `<div class="asset-img-thumb" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">img</div>`;
@@ -728,15 +733,15 @@ function buildAssetsModal(data) {
       </tr>`;
     }).join('');
     html += `<div class="asset-section">
-      <div class="asset-section-hd">Images (${assets.image.length})</div>
-      <table class="asset-table">
+      <div class="asset-section-hd">Images (${activeImage.length})</div>
+      <div class="asset-table-wrap"><table class="asset-table">
         <thead><tr><th style="width:35%">Asset</th><th>Performance</th><th>Format</th><th>Impressions</th><th>Clicks</th><th>Spend</th><th>Conv.</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table></div>`;
+      </table></div></div>`;
   }
 
-  if (assets.text && assets.text.length) {
-    const rows = assets.text.map(a => `<tr>
+  if (activeText.length) {
+    const rows = activeText.map(a => `<tr>
       <td style="max-width:260px;white-space:normal;word-break:break-word">${esc(a.text) || '—'}</td>
       <td style="color:var(--muted)">${fieldLabel(a.fieldType)}</td>
       <td>${perfBadge(a.performanceLabel)}</td>
@@ -745,11 +750,11 @@ function buildAssetsModal(data) {
       <td>$${a.spend.toFixed(2)}</td>
     </tr>`).join('');
     html += `<div class="asset-section">
-      <div class="asset-section-hd">Text (${assets.text.length})</div>
-      <table class="asset-table">
+      <div class="asset-section-hd">Text (${activeText.length})</div>
+      <div class="asset-table-wrap"><table class="asset-table">
         <thead><tr><th style="width:40%">Text</th><th>Type</th><th>Performance</th><th>Impressions</th><th>Clicks</th><th>Spend</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table></div>`;
+      </table></div></div>`;
   }
 
   if (!html) html = '<div class="state"><p style="color:var(--muted)">No asset data found for this date range.</p></div>';
