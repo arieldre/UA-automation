@@ -183,6 +183,7 @@ function processGAResults(results, purchaseResults) {
   const byDate = {};
   for (const r of results) {
     const date = r.segments?.date;
+    if (!date) continue;
     const name = r.campaign?.name || 'Unknown';
     if (!byDate[date]) byDate[date] = {};
     if (!byDate[date][name]) byDate[date][name] = { spend:0, clicks:0, impressions:0, conversions:0, revenue:0, allConversions:0, allRevenue:0, avgCpmMicros:0, _impCount:0, purchases:0, purchaseRevenue:0 };
@@ -406,7 +407,13 @@ app.get('/api/networks',  require('./api/networks'));
 app.get('/api/campaigns', require('./api/campaigns'));
 app.get('/api/assets',    require('./api/assets'));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-app.listen(PORT, () => {
-  console.log(`\n✅ Dashboard → http://localhost:${PORT}`);
-  if (!GOOGLE_REFRESH_TOKEN?.trim()) console.log(`⚠️  Visit http://localhost:${PORT}/auth/google to authorize\n`);
-});
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n✅ Dashboard → http://localhost:${PORT}`);
+    if (!GOOGLE_REFRESH_TOKEN?.trim()) console.log(`⚠️  Visit http://localhost:${PORT}/auth/google to authorize\n`);
+  });
+}
+
+module.exports = app;
+module.exports._test = { parseAF, mergeAFData, processGAResults, aggregateGA, computeMetrics, buildCampaignList };

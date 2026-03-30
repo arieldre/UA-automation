@@ -108,7 +108,7 @@ function processAssetResults(results) {
   return { video, image, text };
 }
 
-module.exports = async function handler(req, res) {
+const handler = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -150,3 +150,6 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: err.message });
   }
 };
+
+module.exports = handler;
+module.exports._test = { processAssetResults, orientationFromFieldType };
