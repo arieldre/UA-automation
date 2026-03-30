@@ -401,7 +401,10 @@ app.get('/api/debug', (req, res) => {
   }
 });
 
-app.get('/api/facebook', require('./api/facebook'));
+app.get('/api/facebook',  require('./api/facebook'));
+app.get('/api/networks',  require('./api/networks'));
+app.get('/api/campaigns', require('./api/campaigns'));
+app.get('/api/assets',    require('./api/assets'));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.listen(PORT, () => {
   console.log(`\n✅ Dashboard → http://localhost:${PORT}`);

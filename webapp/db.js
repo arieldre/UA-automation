@@ -129,4 +129,79 @@ async function getAFByDate(from, to) {
   return { android, ios };
 }
 
-module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate };
+// ── Networks (stored in daily_data as `networks` field) ───
+
+async function getMissingNetworksDates(from, to) {
+  const db    = await connect();
+  const dates = getDatesInRange(from, to);
+  const docs  = await db.collection('daily_data')
+    .find({ _id: { $in: dates }, networks: { $exists: true } })  // null is fine — means no data for that day
+    .project({ _id: 1 })
+    .toArray();
+  const have = new Set(docs.map(d => d._id));
+  return dates.filter(d => !have.has(d));
+}
+
+async function storeNetworksByDate(networksByDate, fetchFrom, fetchTo) {
+  const db  = await connect();
+  const col = db.collection('daily_data');
+  const ops = getDatesInRange(fetchFrom, fetchTo).map(date => ({
+    updateOne: {
+      filter: { _id: date },
+      update: { $set: { networks: networksByDate[date] || null, fetched_at: new Date().toISOString() } },
+      upsert: true
+    }
+  }));
+  await col.bulkWrite(ops);
+}
+
+async function getNetworksByDate(from, to) {
+  const db   = await connect();
+  const docs = await db.collection('daily_data')
+    .find({ _id: { $in: getDatesInRange(from, to) }, networks: { $exists: true, $ne: null } })
+    .project({ _id: 1, networks: 1 })
+    .toArray();
+  const byDate = {};
+  for (const doc of docs) byDate[doc._id] = doc.networks;
+  return byDate;
+}
+
+// ── Assets (collection: assets_data, keyed by campaignId_from_to) ─
+
+async function getAssets(campaignId, from, to) {
+  const db  = await connect();
+  const doc = await db.collection('assets_data').findOne({ _id: `${campaignId}_${from}_${to}` });
+  if (!doc) return null;
+  if (Date.now() - new Date(doc.fetched_at).getTime() > 86400000) return null; // 24h TTL
+  return doc.data;
+}
+
+async function storeAssets(campaignId, from, to, data) {
+  const db = await connect();
+  await db.collection('assets_data').updateOne(
+    { _id: `${campaignId}_${from}_${to}` },
+    { $set: { campaignId, from, to, data, fetched_at: new Date().toISOString() } },
+    { upsert: true }
+  );
+}
+
+// ── Campaign list (collection: campaigns, single doc with 24h TTL) ─
+
+async function getCampaigns() {
+  const db  = await connect();
+  const doc = await db.collection('campaigns').findOne({ _id: 'list' });
+  if (!doc) return null;
+  if (Date.now() - new Date(doc.fetched_at).getTime() > 86400000) return null; // 24h TTL
+  return doc.data;
+}
+
+async function storeCampaigns(data) {
+  const db = await connect();
+  await db.collection('campaigns').updateOne(
+    { _id: 'list' },
+    { $set: { data, fetched_at: new Date().toISOString() } },
+    { upsert: true }
+  );
+}
+
+module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getAssets, storeAssets, getCampaigns, storeCampaigns };
