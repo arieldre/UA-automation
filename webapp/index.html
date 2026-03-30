@@ -502,7 +502,6 @@ async function loadReport(forceRefresh = false) {
     const res  = await fetch(url);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error||'Unknown error');
-    if (data._afDebug) console.log('[AF debug]', data._afDebug);
     reportData = data;
     if (data._fromDB) {
       tag.textContent = `💾 from local DB`;
@@ -615,7 +614,7 @@ function buildNetworksTable(data) {
     return '<div class="state"><p>No network data found for this date range.</p></div>';
   }
   const rows = data.campaigns.map(camp => {
-    const campId  = campaignMap[camp.campaignName] || '';
+    const campId  = camp.campaignId || '';
     const safeName = camp.campaignName.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const totalRow = `<tr class="camp-total" data-cid="${campId}" data-cname="${safeName}" onclick="openAssetsFromRow(this)">
       <td><span class="camp-link-text">${safeName}</span></td>
@@ -682,16 +681,18 @@ function perfBadge(label) {
 
 function buildAssetsModal(data) {
   const { assets } = data;
+  const esc = s => s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+  const fieldLabel = ft => ft === 'HEADLINE' ? 'Headline' : ft === 'DESCRIPTION' ? 'Description' : ft === 'LONG_HEADLINE' ? 'Long Headline' : ft === 'CALL_TO_ACTION_SELECTION' ? 'CTA' : ft === 'BUSINESS_NAME' ? 'Business Name' : ft || '—';
   let html = '';
 
   if (assets.video && assets.video.length) {
     const rows = assets.video.map(a => {
       const thumb = a.youtubeId
-        ? `<img class="asset-thumb" src="https://img.youtube.com/vi/${a.youtubeId}/mqdefault.jpg" loading="lazy">`
+        ? `<img class="asset-thumb" src="https://img.youtube.com/vi/${esc(a.youtubeId)}/mqdefault.jpg" loading="lazy">`
         : `<div class="asset-thumb" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">video</div>`;
       const link = a.youtubeId
-        ? `<a class="asset-name" href="https://www.youtube.com/watch?v=${a.youtubeId}" target="_blank">${a.name || a.youtubeId}</a>`
-        : `<span class="asset-name">${a.name || a.fieldType}</span>`;
+        ? `<a class="asset-name" href="https://www.youtube.com/watch?v=${esc(a.youtubeId)}" target="_blank">${esc(a.name) || esc(a.youtubeId)}</a>`
+        : `<span class="asset-name">${esc(a.name) || esc(a.fieldType)}</span>`;
       return `<tr>
         <td><div style="display:flex;align-items:center;gap:8px">${thumb}${link}</div></td>
         <td>${perfBadge(a.performanceLabel)}</td>
@@ -717,7 +718,7 @@ function buildAssetsModal(data) {
         ? `<img class="asset-img-thumb" src="${a.imageUrl}" loading="lazy">`
         : `<div class="asset-img-thumb" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">img</div>`;
       return `<tr>
-        <td><div style="display:flex;align-items:center;gap:8px">${thumb}<span class="asset-name">${a.name || a.fieldType}</span></div></td>
+        <td><div style="display:flex;align-items:center;gap:8px">${thumb}<span class="asset-name">${esc(a.name) || esc(a.fieldType)}</span></div></td>
         <td>${perfBadge(a.performanceLabel)}</td>
         <td style="color:var(--muted)">${a.orientation || '—'}</td>
         <td>${a.impressions.toLocaleString()}</td>
@@ -735,9 +736,8 @@ function buildAssetsModal(data) {
   }
 
   if (assets.text && assets.text.length) {
-    const fieldLabel = ft => ft === 'HEADLINE' ? 'Headline' : ft === 'DESCRIPTION' ? 'Description' : ft === 'LONG_HEADLINE' ? 'Long Headline' : ft === 'CALL_TO_ACTION_SELECTION' ? 'CTA' : ft || '—';
     const rows = assets.text.map(a => `<tr>
-      <td style="max-width:260px;white-space:normal;word-break:break-word">${a.text || '—'}</td>
+      <td style="max-width:260px;white-space:normal;word-break:break-word">${esc(a.text) || '—'}</td>
       <td style="color:var(--muted)">${fieldLabel(a.fieldType)}</td>
       <td>${perfBadge(a.performanceLabel)}</td>
       <td>${a.impressions.toLocaleString()}</td>

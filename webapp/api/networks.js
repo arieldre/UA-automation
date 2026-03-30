@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { getMissingNetworksDates, storeNetworksByDate, getNetworksByDate } = require('../db');
+const { getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getCampaigns } = require('../db');
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN } = process.env;
 
@@ -44,13 +44,15 @@ const NETWORK_LABELS = {
 };
 
 function processNetworkResults(results) {
-  // Returns { "YYYY-MM-DD": { "CampaignName": { "SEARCH": { spend, clicks, impressions, conversions } } } }
-  const byDate = {};
+  // Returns { byDate: { "YYYY-MM-DD": { "CampaignName": { "SEARCH": {...} } } }, campaignIds: { name → id } }
+  const byDate = {}, campaignIds = {};
   for (const r of results) {
     const date    = r.segments?.date;
     const name    = r.campaign?.name || 'Unknown';
+    const id      = r.campaign?.id;
     const network = r.segments?.adNetworkType || 'UNKNOWN';
     if (!date) continue;
+    if (id) campaignIds[name] = id;
     if (!byDate[date])          byDate[date] = {};
     if (!byDate[date][name])    byDate[date][name] = {};
     if (!byDate[date][name][network]) byDate[date][name][network] = { spend: 0, clicks: 0, impressions: 0, conversions: 0 };
@@ -60,10 +62,10 @@ function processNetworkResults(results) {
     m.impressions += parseInt(r.metrics?.impressions || 0);
     m.conversions += parseFloat(r.metrics?.conversions || 0);
   }
-  return byDate;
+  return { byDate, campaignIds };
 }
 
-function aggregateNetworks(networksByDate, from, to) {
+function aggregateNetworks(networksByDate, campaignIds) {
   // Aggregate all dates: { campaignName → { networkType → { spend, clicks, impressions, conversions } } }
   const byCampaign = {};
   for (const dayData of Object.values(networksByDate)) {
@@ -110,7 +112,7 @@ function aggregateNetworks(networksByDate, from, to) {
     total.cpm  = total.impressions > 0 ? +((total.spend / total.impressions) * 1000).toFixed(2) : null;
     total.cpc  = total.clicks > 0      ? +(total.spend / total.clicks).toFixed(3) : null;
 
-    return { campaignName, networks, total };
+    return { campaignId: campaignIds[campaignName] || null, campaignName, networks, total };
   }).sort((a, b) => b.total.spend - a.total.spend);
 
   return campaigns;
@@ -126,6 +128,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const missing = await getMissingNetworksDates(from, to);
+    let liveCampaignIds = null;
 
     if (missing.length > 0) {
       const fetchFrom = missing[0];
@@ -139,12 +142,21 @@ module.exports = async function handler(req, res) {
           AND campaign.status = ENABLED
       `);
       if (raw.error) throw new Error(raw.error.message || JSON.stringify(raw.error));
-      const networksByDate = processNetworkResults(raw.results || []);
-      await storeNetworksByDate(networksByDate, fetchFrom, fetchTo);
+      const { byDate, campaignIds } = processNetworkResults(raw.results || []);
+      liveCampaignIds = campaignIds;
+      await storeNetworksByDate(byDate, fetchFrom, fetchTo);
+    }
+
+    // Build campaignIds map: prefer live data; fall back to campaigns cache
+    let campaignIds = liveCampaignIds;
+    if (!campaignIds) {
+      const cached = await getCampaigns();
+      campaignIds = {};
+      for (const c of (cached || [])) campaignIds[c.name] = c.id;
     }
 
     const networksByDate = await getNetworksByDate(from, to);
-    const campaigns      = aggregateNetworks(networksByDate, from, to);
+    const campaigns      = aggregateNetworks(networksByDate, campaignIds);
 
     res.json({ from, to, campaigns, _fromDB: missing.length === 0 });
   } catch (err) {
