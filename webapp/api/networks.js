@@ -141,20 +141,27 @@ const AF_CHANNEL_CONFIG = [
 async function fetchAFChannels(appId, from, to) {
   if (!APPSFLYER_TOKEN || !appId) return { _afError: 'missing config' };
   try {
-    // Try channel_by_date_report first; fall back to partners_by_date_report
-    const endpoints = [
-      'channel_by_date_report/v5',
-      'partners_by_date_report/v5',
+    // Try aggregate endpoints that may return a Channel column
+    const aggEndpoints = [
+      `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/channel_by_date_report/v5?from=${from}&to=${to}&media_source=googleadwords_int&category=standard`,
+      `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_channel_report/v5?from=${from}&to=${to}&media_source=googleadwords_int&category=standard`,
+      `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_by_date_report/v5?from=${from}&to=${to}&media_source=googleadwords_int&category=standard&groupings=channel`,
     ];
-    for (const ep of endpoints) {
-      const url = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/${ep}` +
-        `?from=${from}&to=${to}&media_source=googleadwords_int&category=standard`;
+    for (const url of aggEndpoints) {
       const r    = await fetch(url, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
       const text = await r.text();
-      if (!r.ok || text.trim().startsWith('{')) continue; // try next endpoint
-      return text;
+      if (!r.ok || text.trim().startsWith('{')) continue;
+      // Only use if response has a Channel column
+      const header = text.split('\n')[0].toLowerCase();
+      if (header.includes('channel')) return text;
     }
-    return { _afError: 'all endpoints failed' };
+    // Fallback: raw installs report — has Channel column per install record
+    const rawUrl = `https://hq1.appsflyer.com/api/raw-data/export/app/${appId}/installs_report/v5` +
+      `?from=${from}&to=${to}&media_source=googleadwords_int&category=standard&maximum_rows=500000`;
+    const r    = await fetch(rawUrl, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
+    const text = await r.text();
+    if (!r.ok || text.trim().startsWith('{')) return { _afError: text.substring(0, 200) };
+    return { _raw: true, csv: text };
   } catch (e) {
     return { _afError: e.message };
   }
@@ -162,29 +169,52 @@ async function fetchAFChannels(appId, from, to) {
 
 // Returns { 'YYYY-MM-DD': { channelKey: { installs, cost, revenue } } }
 function parseAFChannelsByDate(raw) {
-  if (!raw || typeof raw !== 'string') return {};
-  const lines = raw.trim().split('\n').filter(Boolean);
+  // raw is either a CSV string (aggregate) or { _raw: true, csv: string } (raw installs)
+  const isRaw = raw && typeof raw === 'object' && raw._raw;
+  const csv   = isRaw ? raw.csv : raw;
+  if (!csv || typeof csv !== 'string') return {};
+  const lines = csv.trim().split('\n').filter(Boolean);
   if (lines.length < 2) return {};
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-  const dtIdx = headers.findIndex(h => h === 'date');
-  const chIdx = headers.findIndex(h => h.includes('channel'));
-  const inIdx = headers.findIndex(h => h === 'installs');
-  const coIdx = headers.findIndex(h => h === 'cost' || h === 'total cost');
-  const reIdx = headers.findIndex(h => h === 'revenue' || h === 'total revenue');
-  if (chIdx === -1 || dtIdx === -1) return {};
+
+  const chIdx = headers.findIndex(h => h === 'channel');
+  if (chIdx === -1) return {};
 
   const byDate = {};
-  for (let i = 1; i < lines.length; i++) {
-    const cols    = lines[i].split(',');
-    const channel = cols[chIdx]?.trim();
-    const date    = cols[dtIdx]?.trim();
-    if (!channel || !date) continue;
-    if (!byDate[date]) byDate[date] = {};
-    byDate[date][channel] = {
-      installs: inIdx >= 0 ? (parseFloat(cols[inIdx]) || 0) : 0,
-      cost:     coIdx >= 0 ? (parseFloat(cols[coIdx]) || 0) : 0,
-      revenue:  reIdx >= 0 ? (parseFloat(cols[reIdx]) || 0) : 0,
-    };
+
+  if (isRaw) {
+    // Raw installs: one row per install — group by date + channel, count installs
+    const dtIdx = headers.findIndex(h => h === 'install time');
+    if (dtIdx === -1) return {};
+    for (let i = 1; i < lines.length; i++) {
+      const cols    = lines[i].split(',');
+      const channel = cols[chIdx]?.trim();
+      const dtRaw   = cols[dtIdx]?.trim();
+      if (!channel || !dtRaw) continue;
+      const date = dtRaw.split(' ')[0]; // "2026-03-17 10:30:00" → "2026-03-17"
+      if (!byDate[date])          byDate[date] = {};
+      if (!byDate[date][channel]) byDate[date][channel] = { installs: 0, cost: 0, revenue: 0 };
+      byDate[date][channel].installs++;
+    }
+  } else {
+    // Aggregate CSV: one row per channel+date
+    const dtIdx = headers.findIndex(h => h === 'date');
+    const inIdx = headers.findIndex(h => h === 'installs');
+    const coIdx = headers.findIndex(h => h === 'cost' || h === 'total cost');
+    const reIdx = headers.findIndex(h => h === 'revenue' || h === 'total revenue');
+    if (dtIdx === -1) return {};
+    for (let i = 1; i < lines.length; i++) {
+      const cols    = lines[i].split(',');
+      const channel = cols[chIdx]?.trim();
+      const date    = cols[dtIdx]?.trim();
+      if (!channel || !date) continue;
+      if (!byDate[date]) byDate[date] = {};
+      byDate[date][channel] = {
+        installs: inIdx >= 0 ? (parseFloat(cols[inIdx]) || 0) : 0,
+        cost:     coIdx >= 0 ? (parseFloat(cols[coIdx]) || 0) : 0,
+        revenue:  reIdx >= 0 ? (parseFloat(cols[reIdx]) || 0) : 0,
+      };
+    }
   }
   return byDate;
 }
@@ -319,8 +349,12 @@ const handler = async function handler(req, res) {
         ]);
         if (rawAndroid?._afError) afDebug.errors.push(`android: ${rawAndroid._afError}`);
         if (rawIos?._afError)     afDebug.errors.push(`ios: ${rawIos._afError}`);
-        afDebug.androidHeaders = typeof rawAndroid === 'string' ? rawAndroid.split('\n')[0] : null;
-        afDebug.iosHeaders     = typeof rawIos     === 'string' ? rawIos.split('\n')[0]     : null;
+        const andCsv = rawAndroid?._raw ? rawAndroid.csv : rawAndroid;
+        const iosCsv = rawIos?._raw     ? rawIos.csv     : rawIos;
+        afDebug.androidHeaders = typeof andCsv === 'string' ? andCsv.split('\n')[0] : null;
+        afDebug.iosHeaders     = typeof iosCsv === 'string' ? iosCsv.split('\n')[0] : null;
+        afDebug.androidIsRaw   = !!rawAndroid?._raw;
+        afDebug.iosIsRaw       = !!rawIos?._raw;
 
         if (!rawAndroid?._afError || !rawIos?._afError) {
           const byDateAndroid = parseAFChannelsByDate(rawAndroid);
