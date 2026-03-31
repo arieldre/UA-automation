@@ -141,13 +141,20 @@ const AF_CHANNEL_CONFIG = [
 async function fetchAFChannels(appId, from, to) {
   if (!APPSFLYER_TOKEN || !appId) return { _afError: 'missing config' };
   try {
-    const url = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_by_date_report/v5` +
-      `?from=${from}&to=${to}` +
-      `&groupings=af_channel&kpis=installs,cost,revenue&media_source=googleadwords_int`;
-    const r = await fetch(url, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
-    const text = await r.text();
-    if (!r.ok || text.trim().startsWith('{')) return { _afError: text.substring(0, 200) };
-    return text;
+    // Try channel_by_date_report first; fall back to partners_by_date_report
+    const endpoints = [
+      'channel_by_date_report/v5',
+      'partners_by_date_report/v5',
+    ];
+    for (const ep of endpoints) {
+      const url = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/${ep}` +
+        `?from=${from}&to=${to}&media_source=googleadwords_int&category=standard`;
+      const r    = await fetch(url, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
+      const text = await r.text();
+      if (!r.ok || text.trim().startsWith('{')) continue; // try next endpoint
+      return text;
+    }
+    return { _afError: 'all endpoints failed' };
   } catch (e) {
     return { _afError: e.message };
   }
@@ -162,8 +169,8 @@ function parseAFChannelsByDate(raw) {
   const dtIdx = headers.findIndex(h => h === 'date');
   const chIdx = headers.findIndex(h => h.includes('channel'));
   const inIdx = headers.findIndex(h => h === 'installs');
-  const coIdx = headers.findIndex(h => h === 'cost');
-  const reIdx = headers.findIndex(h => h === 'revenue');
+  const coIdx = headers.findIndex(h => h === 'cost' || h === 'total cost');
+  const reIdx = headers.findIndex(h => h === 'revenue' || h === 'total revenue');
   if (chIdx === -1 || dtIdx === -1) return {};
 
   const byDate = {};
