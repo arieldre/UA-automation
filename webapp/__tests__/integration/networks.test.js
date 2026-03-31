@@ -2,12 +2,13 @@ const express  = require('express');
 const supertest = require('supertest');
 
 jest.mock('../../db', () => ({
-  getMissingNetworksDates:  jest.fn(),
-  storeNetworksByDate:      jest.fn().mockResolvedValue(undefined),
-  getNetworksByDate:        jest.fn(),
-  getCampaigns:             jest.fn(),
-  getAFNetworkChannels:     jest.fn().mockResolvedValue(null),
-  storeAFNetworkChannels:   jest.fn().mockResolvedValue(undefined),
+  getMissingNetworksDates:   jest.fn(),
+  storeNetworksByDate:       jest.fn().mockResolvedValue(undefined),
+  getNetworksByDate:         jest.fn(),
+  getCampaigns:              jest.fn(),
+  getMissingAFChannelDates:  jest.fn().mockResolvedValue([]),
+  storeAFChannelForDate:     jest.fn().mockResolvedValue(undefined),
+  getAFChannelsForRange:     jest.fn().mockResolvedValue(null),
 }));
 
 const db = require('../../db');
@@ -67,7 +68,8 @@ describe('GET /api/networks — DB cache hit', () => {
     db.getMissingNetworksDates.mockResolvedValue([]);
     db.getNetworksByDate.mockResolvedValue(MOCK_NET_BY_DATE);
     db.getCampaigns.mockResolvedValue([{ name: 'CampA', id: '123' }]);
-    db.getAFNetworkChannels.mockResolvedValue({ 'ACI_Search': { installs: 100, cost: 50, revenue: 200 } });
+    db.getMissingAFChannelDates.mockResolvedValue([]);
+    db.getAFChannelsForRange.mockResolvedValue({ 'ACI_Search': { installs: 100, cost: 50, revenue: 200 } });
   });
 
   test('returns 200 with _fromDB: true', async () => {
@@ -126,6 +128,8 @@ describe('GET /api/networks — GA API fetch', () => {
 
   beforeEach(() => {
     db.getMissingNetworksDates.mockResolvedValue(['2026-03-01']);
+    db.getMissingAFChannelDates.mockResolvedValue([]);
+    db.getAFChannelsForRange.mockResolvedValue(null);
     db.getNetworksByDate.mockResolvedValue({
       '2026-03-01': { CampA: { SEARCH: { spend: 1, clicks: 100, impressions: 5000, conversions: 5 } } },
     });

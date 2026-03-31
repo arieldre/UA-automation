@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getCampaigns, getAFNetworkChannels, storeAFNetworkChannels } = require('../db');
+const { getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getCampaigns, getMissingAFChannelDates, storeAFChannelForDate, getAFChannelsForRange } = require('../db');
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
         APPSFLYER_TOKEN, APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
@@ -270,29 +270,30 @@ const handler = async function handler(req, res) {
     const networksByDate = await getNetworksByDate(from, to);
     const campaigns      = aggregateNetworks(networksByDate, campaignIds);
 
-    // ── AF channel data ───────────────────────────────────────────────────────
-    let afChannels     = null;
-    let _afFromDB      = false;
-    const androidId    = APPSFLYER_ANDROID_APP_ID;
-    const iosId        = APPSFLYER_IOS_APP_ID;
+    // ── AF channel data (per-date store) ─────────────────────────────────────
+    let afChannels  = null;
+    const androidId = APPSFLYER_ANDROID_APP_ID;
+    const iosId     = APPSFLYER_IOS_APP_ID;
 
     if (androidId && iosId) {
-      const cached = await getAFNetworkChannels(androidId, from, to);
-      if (cached) {
-        afChannels = cached;
-        _afFromDB  = true;
-      } else {
-        const [rawAndroid, rawIos] = await Promise.all([
-          fetchAFChannels(androidId, from, to),
-          fetchAFChannels(iosId, from, to),
-        ]);
-        const parsedAndroid = parseAFChannels(rawAndroid);
-        const parsedIos     = parseAFChannels(rawIos);
-        afChannels = mergeAFChannelPlatforms(parsedAndroid, parsedIos);
-        if (Object.keys(afChannels).length > 0) {
-          await storeAFNetworkChannels(androidId, from, to, afChannels);
+      const missingDates = await getMissingAFChannelDates(androidId, from, to);
+      if (missingDates.length > 0) {
+        // Fetch missing dates in batches of 5
+        for (let i = 0; i < missingDates.length; i += 5) {
+          const batch = missingDates.slice(i, i + 5);
+          await Promise.all(batch.map(async date => {
+            const [rawAndroid, rawIos] = await Promise.all([
+              fetchAFChannels(androidId, date, date),
+              fetchAFChannels(iosId, date, date),
+            ]);
+            const merged = mergeAFChannelPlatforms(parseAFChannels(rawAndroid), parseAFChannels(rawIos));
+            if (Object.keys(merged).length > 0) {
+              await storeAFChannelForDate(androidId, date, merged);
+            }
+          }));
         }
       }
+      afChannels = await getAFChannelsForRange(androidId, from, to);
     }
 
     // Attach AF channel rows to each campaign
@@ -301,7 +302,7 @@ const handler = async function handler(req, res) {
       afChannelRows: buildAFChannelRows(camp, afChannels),
     }));
 
-    res.json({ from, to, campaigns: campaignsWithAF, _fromDB: missing.length === 0, _afFromDB });
+    res.json({ from, to, campaigns: campaignsWithAF, _fromDB: missing.length === 0 });
   } catch (err) {
     console.error('[networks]', err);
     res.status(500).json({ error: err.message });
@@ -309,4 +310,4 @@ const handler = async function handler(req, res) {
 };
 
 module.exports = handler;
-module.exports._test = { processNetworkResults, aggregateNetworks, parseAFChannels, mergeAFChannelPlatforms, buildAFChannelRows };
+module.exports._test = { processNetworkResults, aggregateNetworks, fetchAFChannels, parseAFChannels, mergeAFChannelPlatforms, buildAFChannelRows };

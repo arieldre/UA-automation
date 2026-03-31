@@ -172,7 +172,6 @@ async function getAssets(campaignId, from, to) {
   const db  = await connect();
   const doc = await db.collection('assets_data').findOne({ _id: `${campaignId}_${from}_${to}` });
   if (!doc) return null;
-  if (Date.now() - new Date(doc.fetched_at).getTime() > 86400000) return null; // 24h TTL
   return doc.data;
 }
 
@@ -180,28 +179,49 @@ async function storeAssets(campaignId, from, to, data) {
   const db = await connect();
   await db.collection('assets_data').updateOne(
     { _id: `${campaignId}_${from}_${to}` },
-    { $set: { campaignId, from, to, data, fetched_at: new Date().toISOString() } },
+    { $setOnInsert: { campaignId, from, to, data, fetched_at: new Date().toISOString() } },
     { upsert: true }
   );
 }
 
-// ── AF Network channel cache (collection: af_network_cache, keyed by appId_from_to) ─
+// ── AF Network channel cache (collection: af_channels_daily, keyed by appId_date) ─
 
-async function getAFNetworkChannels(appId, from, to) {
-  const db  = await connect();
-  const doc = await db.collection('af_network_cache').findOne({ _id: `${appId}_${from}_${to}` });
-  if (!doc) return null;
-  if (Date.now() - new Date(doc.fetched_at).getTime() > 86400000) return null; // 24h TTL
-  return doc.channels;
+async function getMissingAFChannelDates(appId, from, to) {
+  const db    = await connect();
+  const dates = getDatesInRange(from, to);
+  const docs  = await db.collection('af_channels_daily')
+    .find({ _id: { $in: dates.map(d => `${appId}_${d}`) } })
+    .project({ _id: 1 })
+    .toArray();
+  const have = new Set(docs.map(d => d._id));
+  return dates.filter(d => !have.has(`${appId}_${d}`));
 }
 
-async function storeAFNetworkChannels(appId, from, to, channels) {
+async function storeAFChannelForDate(appId, date, channels) {
   const db = await connect();
-  await db.collection('af_network_cache').updateOne(
-    { _id: `${appId}_${from}_${to}` },
-    { $set: { appId, from, to, channels, fetched_at: new Date().toISOString() } },
+  await db.collection('af_channels_daily').updateOne(
+    { _id: `${appId}_${date}` },
+    { $setOnInsert: { appId, date, channels, fetched_at: new Date().toISOString() } },
     { upsert: true }
   );
+}
+
+async function getAFChannelsForRange(appId, from, to) {
+  const db   = await connect();
+  const dates = getDatesInRange(from, to);
+  const docs  = await db.collection('af_channels_daily')
+    .find({ _id: { $in: dates.map(d => `${appId}_${d}`) } })
+    .toArray();
+  const merged = {};
+  for (const doc of docs) {
+    for (const [ch, m] of Object.entries(doc.channels || {})) {
+      if (!merged[ch]) merged[ch] = { installs: 0, cost: 0, revenue: 0 };
+      merged[ch].installs += m.installs || 0;
+      merged[ch].cost     += m.cost     || 0;
+      merged[ch].revenue  += m.revenue  || 0;
+    }
+  }
+  return Object.keys(merged).length > 0 ? merged : null;
 }
 
 // ── Asset state (collection: campaign_assets_state, keyed by campaignId) ─
@@ -239,4 +259,4 @@ async function storeCampaigns(data) {
   );
 }
 
-module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getAssets, storeAssets, getCampaigns, storeCampaigns, getAFNetworkChannels, storeAFNetworkChannels, getAssetState, storeAssetState };
+module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getAssets, storeAssets, getCampaigns, storeCampaigns, getMissingAFChannelDates, storeAFChannelForDate, getAFChannelsForRange, getAssetState, storeAssetState };
