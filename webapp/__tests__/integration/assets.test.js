@@ -45,7 +45,7 @@ describe('GET /api/assets — validation', () => {
   test('400 when campaignId is missing', async () => {
     const res = await request.get('/api/assets?from=2026-03-01&to=2026-03-28');
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/required/);
+    expect(res.body.error).toMatch(/Invalid campaignId/);
   });
 
   test('400 when from is missing', async () => {

@@ -26,7 +26,7 @@ const request = supertest(app);
 const MOCK_TOKEN   = { access_token: 'mock-token', expires_in: 0 }; // expires immediately — no cross-test caching
 const MOCK_CAMPS   = [{ id: '123', name: 'CampA', channelType: 'MULTI_CHANNEL' }];
 const MOCK_ASSETS  = { results: [] };
-const AF_CSV       = `AF Channel,Installs,Cost,Revenue\nACI_Search,100,50,200\n`;
+const AF_CSV       = `Date,Channel,Installs,Cost,Revenue\n2026-03-30,ACI_Search,100,50,200\n`;
 
 beforeEach(() => {
   jest.clearAllMocks();

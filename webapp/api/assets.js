@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { getAssets, storeAssets, getAssetState, storeAssetState } = require('../db');
+const { getAssets, storeAssets, getAssetState, storeAssetState, appendAssetChanges, getAssetHistory } = require('../db');
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN } = process.env;
 
@@ -148,13 +148,66 @@ function computeAssetStateDiff(prevStateAssets, freshAssets, today) {
   return result;
 }
 
+function deriveAssetChanges(prevAssets, mergedAssets, campaignId, campaignName, today) {
+  const changes = [];
+  for (const type of ['video', 'image', 'text']) {
+    const prev   = prevAssets?.[type]   || [];
+    const merged = mergedAssets?.[type] || [];
+    const prevMap   = Object.fromEntries(prev.map(a => [`${a.id}_${a.fieldType}`, a]));
+    const mergedMap = Object.fromEntries(merged.map(a => [`${a.id}_${a.fieldType}`, a]));
+    for (const [key, ma] of Object.entries(mergedMap)) {
+      const pa   = prevMap[key];
+      const name = ma.name || ma.youtubeId || (ma.text ? ma.text.slice(0, 60) : null) || key;
+      if (!pa) {
+        if (ma.status === 'live') {
+          changes.push({ campaignId, campaignName, assetKey: key, assetName: name, assetType: type,
+            changeType: 'added', oldValue: null,
+            newValue: { status: 'live', performanceLabel: ma.performanceLabel },
+            effectiveDate: today, recordedAt: new Date().toISOString() });
+        }
+      } else if (pa.status === 'live' && ma.status === 'paused') {
+        changes.push({ campaignId, campaignName, assetKey: key, assetName: name, assetType: type,
+          changeType: 'paused',
+          oldValue: { status: 'live', performanceLabel: pa.performanceLabel },
+          newValue: { status: 'paused', performanceLabel: ma.performanceLabel },
+          effectiveDate: today, recordedAt: new Date().toISOString() });
+      } else if (pa.status === 'paused' && ma.status === 'live') {
+        changes.push({ campaignId, campaignName, assetKey: key, assetName: name, assetType: type,
+          changeType: 'resumed',
+          oldValue: { status: 'paused', performanceLabel: pa.performanceLabel },
+          newValue: { status: 'live', performanceLabel: ma.performanceLabel },
+          effectiveDate: today, recordedAt: new Date().toISOString() });
+      } else if (ma.status === 'live' && pa.performanceLabel !== ma.performanceLabel
+                 && ma.performanceLabel && ma.performanceLabel !== 'UNSPECIFIED') {
+        changes.push({ campaignId, campaignName, assetKey: key, assetName: name, assetType: type,
+          changeType: 'performance_changed',
+          oldValue: { status: pa.status, performanceLabel: pa.performanceLabel },
+          newValue: { status: ma.status, performanceLabel: ma.performanceLabel },
+          effectiveDate: today, recordedAt: new Date().toISOString() });
+      }
+    }
+  }
+  return changes;
+}
+
 const handler = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { campaignId, from, to } = req.query;
-  if (!campaignId || !from || !to) return res.status(400).json({ error: 'campaignId, from, and to are required' });
-  if (!/^\d+$/.test(campaignId)) return res.status(400).json({ error: 'Invalid campaignId' });
+  const { campaignId, from, to, history } = req.query;
+  if (!campaignId || !/^\d+$/.test(campaignId)) return res.status(400).json({ error: 'Invalid campaignId' });
+
+  // History endpoint — just needs campaignId
+  if (history === '1') {
+    try {
+      const hist = await getAssetHistory(campaignId);
+      return res.json({ history: hist });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  if (!from || !to) return res.status(400).json({ error: 'campaignId, from, and to are required' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return res.status(400).json({ error: 'Invalid date format' });
 
   try {
@@ -188,6 +241,8 @@ const handler = async function handler(req, res) {
         const mergedAssets   = computeAssetStateDiff(prevState?.assets, freshAssets, today);
         stateDoc = { campaignId, campaignName: stateCampName, assets: mergedAssets, lastChecked: today };
         await storeAssetState(campaignId, stateDoc);
+        const changes = deriveAssetChanges(prevState?.assets, mergedAssets, campaignId, stateCampName, today);
+        if (changes.length > 0) await appendAssetChanges(changes);
       }
     }
 
@@ -226,4 +281,4 @@ const handler = async function handler(req, res) {
 };
 
 module.exports = handler;
-module.exports._test = { processAssetResults, orientationFromFieldType, computeAssetStateDiff };
+module.exports._test = { processAssetResults, orientationFromFieldType, computeAssetStateDiff, deriveAssetChanges };

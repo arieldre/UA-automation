@@ -56,12 +56,13 @@ function processNetworkResults(results) {
     if (id) campaignIds[name] = id;
     if (!byDate[date])          byDate[date] = {};
     if (!byDate[date][name])    byDate[date][name] = {};
-    if (!byDate[date][name][network]) byDate[date][name][network] = { spend: 0, clicks: 0, impressions: 0, conversions: 0 };
+    if (!byDate[date][name][network]) byDate[date][name][network] = { spend: 0, clicks: 0, impressions: 0, conversions: 0, conversionsValue: 0 };
     const m = byDate[date][name][network];
-    m.spend       += (r.metrics?.costMicros || 0) / 1e6;
-    m.clicks      += parseInt(r.metrics?.clicks || 0);
-    m.impressions += parseInt(r.metrics?.impressions || 0);
-    m.conversions += parseFloat(r.metrics?.conversions || 0);
+    m.spend           += (r.metrics?.costMicros || 0) / 1e6;
+    m.clicks          += parseInt(r.metrics?.clicks || 0);
+    m.impressions     += parseInt(r.metrics?.impressions || 0);
+    m.conversions     += parseFloat(r.metrics?.conversions || 0);
+    m.conversionsValue += parseFloat(r.metrics?.conversionsValue || 0);
   }
   return { byDate, campaignIds };
 }
@@ -73,12 +74,13 @@ function aggregateNetworks(networksByDate, campaignIds) {
     for (const [camp, networks] of Object.entries(dayData)) {
       if (!byCampaign[camp]) byCampaign[camp] = {};
       for (const [net, m] of Object.entries(networks)) {
-        if (!byCampaign[camp][net]) byCampaign[camp][net] = { spend: 0, clicks: 0, impressions: 0, conversions: 0 };
+        if (!byCampaign[camp][net]) byCampaign[camp][net] = { spend: 0, clicks: 0, impressions: 0, conversions: 0, conversionsValue: 0 };
         const a = byCampaign[camp][net];
-        a.spend       += m.spend;
-        a.clicks      += m.clicks;
-        a.impressions += m.impressions;
-        a.conversions += m.conversions;
+        a.spend           += m.spend;
+        a.clicks          += m.clicks;
+        a.impressions     += m.impressions;
+        a.conversions     += m.conversions;
+        a.conversionsValue += (m.conversionsValue || 0);
       }
     }
   }
@@ -88,11 +90,12 @@ function aggregateNetworks(networksByDate, campaignIds) {
       .filter(([, m]) => m.spend > 0 || m.impressions > 0)
       .map(([network, m]) => ({
         network,
-        label:       NETWORK_LABELS[network] || network,
-        spend:       +m.spend.toFixed(2),
-        clicks:      m.clicks,
-        impressions: m.impressions,
-        conversions: +m.conversions.toFixed(2),
+        label:           NETWORK_LABELS[network] || network,
+        spend:           +m.spend.toFixed(2),
+        clicks:          m.clicks,
+        impressions:     m.impressions,
+        conversions:     +m.conversions.toFixed(2),
+        conversionsValue: +((m.conversionsValue || 0).toFixed(2)),
         ctr:  m.impressions > 0 ? +((m.clicks / m.impressions) * 100).toFixed(3) : null,
         cpm:  m.impressions > 0 ? +((m.spend / m.impressions) * 1000).toFixed(2) : null,
         cpc:  m.clicks > 0      ? +(m.spend / m.clicks).toFixed(3) : null,
@@ -100,15 +103,17 @@ function aggregateNetworks(networksByDate, campaignIds) {
       .sort((a, b) => b.spend - a.spend);
 
     const total = networks.reduce((acc, n) => {
-      acc.spend       += n.spend;
-      acc.clicks      += n.clicks;
-      acc.impressions += n.impressions;
-      acc.conversions += n.conversions;
+      acc.spend           += n.spend;
+      acc.clicks          += n.clicks;
+      acc.impressions     += n.impressions;
+      acc.conversions     += n.conversions;
+      acc.conversionsValue += (n.conversionsValue || 0);
       return acc;
-    }, { spend: 0, clicks: 0, impressions: 0, conversions: 0 });
+    }, { spend: 0, clicks: 0, impressions: 0, conversions: 0, conversionsValue: 0 });
 
-    total.spend       = +total.spend.toFixed(2);
-    total.conversions = +total.conversions.toFixed(2);
+    total.spend           = +total.spend.toFixed(2);
+    total.conversions     = +total.conversions.toFixed(2);
+    total.conversionsValue = +total.conversionsValue.toFixed(2);
     total.ctr  = total.impressions > 0 ? +((total.clicks / total.impressions) * 100).toFixed(3) : null;
     total.cpm  = total.impressions > 0 ? +((total.spend / total.impressions) * 1000).toFixed(2) : null;
     total.cpc  = total.clicks > 0      ? +(total.spend / total.clicks).toFixed(3) : null;
@@ -281,10 +286,8 @@ function buildAFChannelRows(campaign, afChannels) {
       gaConversions: +gaConversions.toFixed(2),
       gaCtr:         gaImpressions > 0 ? +((gaClicks / gaImpressions) * 100).toFixed(3) : null,
       afInstalls,
-      afCost:        +afCost.toFixed(2),
       afRevenue:     +afRevenue.toFixed(2),
-      afCpa:         afInstalls > 0 ? +(afCost / afInstalls).toFixed(4) : null,
-      afRoas:        afCost > 0     ? +((afRevenue / afCost) * 100).toFixed(2) : null,
+      afCpa:         afInstalls > 0 && afCost > 0 ? +(afCost / afInstalls).toFixed(4) : null,
     });
   }
   return rows;
@@ -308,7 +311,8 @@ const handler = async function handler(req, res) {
       const token     = await getAccessToken();
       const raw = await gaQuery(token, `
         SELECT campaign.name, campaign.id, segments.date, segments.ad_network_type,
-               metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions
+               metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions,
+               metrics.conversions_value
         FROM campaign
         WHERE segments.date BETWEEN '${fetchFrom}' AND '${fetchTo}'
           AND campaign.status = ENABLED
@@ -383,7 +387,8 @@ const handler = async function handler(req, res) {
       afChannelRows: buildAFChannelRows(camp, afChannels),
     }));
 
-    res.json({ from, to, campaigns: campaignsWithAF, _fromDB: missing.length === 0, _afDebug: afDebug });
+    res.json({ from, to, campaigns: campaignsWithAF, _fromDB: missing.length === 0, _afDebug: afDebug,
+      _platformNote: 'GA metrics are aggregated across all platforms. AF installs are Android+iOS combined.' });
   } catch (err) {
     console.error('[networks]', err);
     res.status(500).json({ error: err.message });
@@ -392,3 +397,4 @@ const handler = async function handler(req, res) {
 
 module.exports = handler;
 module.exports._test = { processNetworkResults, aggregateNetworks, fetchAFChannels, parseAFChannels, mergeAFChannelPlatforms, buildAFChannelRows };
+module.exports._helpers = { getAccessToken, gaQuery, processNetworkResults, aggregateNetworks, fetchAFChannels, parseAFChannelsByDate, mergeAFChannelPlatforms, buildAFChannelRows, AF_CHANNEL_CONFIG, NETWORK_LABELS };

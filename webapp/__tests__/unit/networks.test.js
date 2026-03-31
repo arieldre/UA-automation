@@ -235,14 +235,14 @@ describe('aggregateNetworks', () => {
 
 describe('parseAFChannels', () => {
   test('parses valid CSV into channel map', () => {
-    const csv = `AF Channel,Installs,Cost,Revenue\nACI_Search,100,50.5,200\nACI_Display,200,80.0,150\n`;
+    const csv = `Date,Channel,Installs,Cost,Revenue\n2026-03-01,ACI_Search,100,50.5,200\n2026-03-01,ACI_Display,200,80.0,150\n`;
     const result = parseAFChannels(csv);
     expect(result['ACI_Search']).toEqual({ installs: 100, cost: 50.5, revenue: 200 });
     expect(result['ACI_Display']).toEqual({ installs: 200, cost: 80.0, revenue: 150 });
   });
 
   test('returns empty object for empty CSV (header only)', () => {
-    const csv = `AF Channel,Installs,Cost,Revenue\n`;
+    const csv = `Date,Channel,Installs,Cost,Revenue\n`;
     expect(parseAFChannels(csv)).toEqual({});
   });
 
@@ -256,7 +256,7 @@ describe('parseAFChannels', () => {
   });
 
   test('handles missing Cost/Revenue columns gracefully (defaults to 0)', () => {
-    const csv = `AF Channel,Installs\nACI_Search,50\n`;
+    const csv = `Date,Channel,Installs\n2026-03-01,ACI_Search,50\n`;
     const result = parseAFChannels(csv);
     expect(result['ACI_Search'].installs).toBe(50);
     expect(result['ACI_Search'].cost).toBe(0);
@@ -264,9 +264,17 @@ describe('parseAFChannels', () => {
   });
 
   test('skips rows with empty channel name', () => {
-    const csv = `AF Channel,Installs,Cost,Revenue\n,100,50,200\nACI_Youtube,300,120,400\n`;
+    const csv = `Date,Channel,Installs,Cost,Revenue\n2026-03-01,,100,50,200\n2026-03-01,ACI_Youtube,300,120,400\n`;
     const result = parseAFChannels(csv);
     expect(Object.keys(result)).toEqual(['ACI_Youtube']);
+  });
+
+  test('merges multiple dates into single channel totals', () => {
+    const csv = `Date,Channel,Installs,Cost,Revenue\n2026-03-01,ACI_Search,100,50,200\n2026-03-02,ACI_Search,50,25,100\n`;
+    const result = parseAFChannels(csv);
+    expect(result['ACI_Search'].installs).toBe(150);
+    expect(result['ACI_Search'].cost).toBeCloseTo(75);
+    expect(result['ACI_Search'].revenue).toBeCloseTo(300);
   });
 });
 
@@ -331,7 +339,7 @@ describe('buildAFChannelRows', () => {
     expect(labels).toContain('ACI_Youtube');
   });
 
-  test('AF installs, CPA and ROAS are accurate (not prorated)', () => {
+  test('AF installs, CPA and revenue are accurate (not prorated)', () => {
     const camp = mkCamp([
       { network: 'SEARCH', spend: 100, clicks: 500, impressions: 10000, conversions: 5 },
     ]);
@@ -339,7 +347,7 @@ describe('buildAFChannelRows', () => {
     const searchRow = rows.find(r => r.afChannel === 'ACI_Search');
     expect(searchRow.afInstalls).toBe(100);
     expect(searchRow.afCpa).toBeCloseTo(50 / 100, 4);
-    expect(searchRow.afRoas).toBeCloseTo((500 / 50) * 100, 1);
+    expect(searchRow.afRevenue).toBeCloseTo(500, 2);
   });
 
   test('returns empty array when afChannels is null', () => {

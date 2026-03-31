@@ -240,6 +240,22 @@ async function storeAssetState(campaignId, doc) {
   );
 }
 
+// ── Asset change log (collection: asset_change_log) ──────────────────────────
+
+async function appendAssetChanges(entries) {
+  if (!entries || entries.length === 0) return;
+  const db = await connect();
+  await db.collection('asset_change_log').insertMany(entries);
+}
+
+async function getAssetHistory(campaignId) {
+  const db = await connect();
+  return db.collection('asset_change_log')
+    .find({ campaignId })
+    .sort({ effectiveDate: -1, recordedAt: -1 })
+    .toArray();
+}
+
 // ── Campaign list (collection: campaigns, single doc with 24h TTL) ─
 
 async function getCampaigns() {
@@ -259,4 +275,4 @@ async function storeCampaigns(data) {
   );
 }
 
-module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getAssets, storeAssets, getCampaigns, storeCampaigns, getMissingAFChannelDates, storeAFChannelForDate, getAFChannelsForRange, getAssetState, storeAssetState };
+module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getAssets, storeAssets, getCampaigns, storeCampaigns, getMissingAFChannelDates, storeAFChannelForDate, getAFChannelsForRange, getAssetState, storeAssetState, appendAssetChanges, getAssetHistory };

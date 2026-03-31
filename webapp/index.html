@@ -114,7 +114,7 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
 /* ── Asset modal ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;display:flex;align-items:center;justify-content:center}
 .modal-overlay.hidden{display:none}
-.modal-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:92vw;max-width:1000px;max-height:88vh;overflow-y:auto;padding:24px;position:relative}
+.modal-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:96vw;max-width:1300px;max-height:90vh;overflow-y:auto;padding:24px;position:relative}
 .modal-close{position:absolute;top:14px;right:18px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1}
 .modal-close:hover{color:var(--text)}
 .modal-title{font-size:15px;font-weight:600;margin-bottom:3px;padding-right:30px}
@@ -122,10 +122,11 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
 .asset-section{margin-bottom:24px}
 .asset-section-hd{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
 .asset-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.asset-table{width:100%;border-collapse:collapse;font-size:12px}
-.asset-table th{padding:7px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+.asset-table{width:100%;border-collapse:collapse;font-size:12px;min-width:860px}
+.asset-table th{padding:7px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;min-width:60px}
+.asset-table th:first-child{min-width:240px}
 .asset-table th:not(:first-child){text-align:right}
-.asset-table td{padding:8px 10px;border-bottom:1px solid rgba(42,42,56,.5);vertical-align:middle}
+.asset-table td{padding:8px 10px;border-bottom:1px solid rgba(42,42,56,.5);vertical-align:middle;white-space:nowrap}
 .asset-table td:not(:first-child){text-align:right}
 .asset-table tr:last-child td{border-bottom:none}
 .asset-table tr:hover td{background:rgba(255,255,255,.015)}
@@ -152,6 +153,12 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
 .networks-table tr.af-row td{color:#c4b5fd;font-size:11px}
 .networks-table tr.af-row td:first-child{padding-left:32px}
 .networks-table tr.af-row:hover td{background:rgba(124,111,255,.05)}
+/* ── Last-month comparison rows ── */
+.networks-table tr.prev-row td{color:var(--muted);font-size:11px;font-style:italic;border-bottom:none}
+.networks-table tr.prev-row td:first-child{padding-left:32px}
+.networks-table tr.prev-header td{background:rgba(107,107,136,.08);color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:3px 10px}
+/* ── Platform filter locked on Networks tab ── */
+#osFilter.locked .btn:not(:first-child){opacity:0.35;pointer-events:none;cursor:not-allowed}
 /* ── Notes page ── */
 .page{display:none}.page.active{display:block}
 .nav-tabs{display:flex;gap:4px;margin-left:auto}
@@ -235,6 +242,9 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
 </div>
 
 <div id="page-networks" class="page">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <button id="compareToggleBtn" class="btn" onclick="toggleCompare()" title="Show previous full calendar month alongside current data">vs Last Month</button>
+  </div>
   <div id="networks-main">
     <div class="state"><div class="icon">🌐</div><p>Click "Networks" tab to load.</p></div>
   </div>
@@ -614,6 +624,9 @@ loadCampaigns();
 let campaignMap = {};
 let currentPage = 'dashboard';
 let _networksFetch = null; // in-flight guard
+let _compareData   = null; // last-month comparison data cache
+let _compareActive = false;
+let _currentCampaignId = null; // for asset history tab
 
 async function loadCampaigns() {
   try {
@@ -629,10 +642,29 @@ function buildNetworksTable(data) {
   if (!data.campaigns || !data.campaigns.length) {
     return '<div class="state"><p>No network data found for this date range.</p></div>';
   }
-  const hasAF = data.campaigns.some(c => c.afChannelRows && c.afChannelRows.length > 0);
+  const hasAF   = data.campaigns.some(c => c.afChannelRows && c.afChannelRows.length > 0);
+  // compare: look up prev-month data for a campaign by id then name
+  const prevFor = camp => {
+    if (!_compareActive || !_compareData) return null;
+    return _compareData.byId[camp.campaignId] || _compareData.byName[camp.campaignName] || null;
+  };
+  // delta chip: colored arrow + value
+  const delta = (cur, prev, fmt2) => {
+    if (prev == null || cur == null) return '<span style="color:var(--muted)">N/A</span>';
+    const d = cur - prev;
+    if (d === 0) return '<span style="color:var(--muted)">—</span>';
+    const sign = d > 0 ? '▲' : '▼';
+    const col  = d > 0 ? '#4ade80' : '#f87171';
+    return `<span style="color:${col}">${sign}${fmt2(Math.abs(d))}</span>`;
+  };
+
+  // total column count for colspan
+  const totalCols = 10 + (hasAF ? 3 : 0); // Campaign, Network, Spend, Clicks, Impressions, CTR, CPM, CPC, Conversions, GA Rev [+ AF Installs, AF CPA, AF Rev]
+
   const rows = data.campaigns.map(camp => {
     const campId   = camp.campaignId || '';
     const safeName = camp.campaignName.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const prev     = prevFor(camp);
     const totalRow = `<tr class="camp-total" data-cid="${campId}" data-cname="${safeName}" onclick="openAssetsFromRow(this)">
       <td><span class="camp-link-text">${safeName}</span></td>
       <td><em style="color:var(--muted);font-weight:400;font-size:11px">total</em></td>
@@ -643,8 +675,29 @@ function buildNetworksTable(data) {
       <td>${fmt.money(camp.total.cpm)}</td>
       <td>${fmt.money(camp.total.cpc)}</td>
       <td>${fmt.num(camp.total.conversions)}</td>
-      ${hasAF ? '<td></td><td></td><td></td><td></td>' : ''}
+      <td>${camp.total.conversionsValue > 0 ? fmt.money(camp.total.conversionsValue) : '—'}</td>
+      ${hasAF ? '<td></td><td></td><td></td>' : ''}
     </tr>`;
+
+    // prev-month comparison row for campaign total
+    let prevTotalRow = '';
+    if (_compareActive) {
+      const p = prev?.total;
+      prevTotalRow = `<tr class="prev-row">
+        <td></td>
+        <td><em>prev month</em></td>
+        <td>${p ? fmt.money(p.spend) : 'N/A'} ${delta(camp.total.spend, p?.spend, v => fmt.money(v))}</td>
+        <td>${p ? fmt.num(p.clicks) : 'N/A'}</td>
+        <td>${p ? fmt.num(p.impressions) : 'N/A'}</td>
+        <td>${p ? fmt.pct(p.ctr) : 'N/A'}</td>
+        <td>${p ? fmt.money(p.cpm) : 'N/A'}</td>
+        <td>${p ? fmt.money(p.cpc) : 'N/A'}</td>
+        <td>${p ? fmt.num(p.conversions) : 'N/A'}</td>
+        <td>${p?.conversionsValue > 0 ? fmt.money(p.conversionsValue) : '—'}</td>
+        ${hasAF ? '<td></td><td></td><td></td>' : ''}
+      </tr>`;
+    }
+
     const netRows = camp.networks.map(n => `<tr class="net-row">
       <td></td>
       <td>${n.label}</td>
@@ -655,41 +708,60 @@ function buildNetworksTable(data) {
       <td>${fmt.money(n.cpm)}</td>
       <td>${fmt.money(n.cpc)}</td>
       <td>${fmt.num(n.conversions)}</td>
-      ${hasAF ? '<td></td><td></td><td></td><td></td>' : ''}
+      <td>—</td>
+      ${hasAF ? '<td></td><td></td><td></td>' : ''}
     </tr>`).join('');
 
     // AF by Channel rows
     let afRows = '';
     if (hasAF && camp.afChannelRows && camp.afChannelRows.length) {
-      afRows += `<tr class="af-header"><td colspan="${9 + (hasAF ? 4 : 0)}" style="padding-left:10px">▸ AF by Channel</td></tr>`;
-      afRows += camp.afChannelRows.map(r => `<tr class="af-row">
-        <td></td>
-        <td>${r.label}</td>
-        <td>${fmt.money(r.gaSpend)}</td>
-        <td>${fmt.num(r.gaClicks)}</td>
-        <td>${fmt.num(r.gaImpressions)}</td>
-        <td>${fmt.pct(r.gaCtr)}</td>
-        <td>—</td>
-        <td>—</td>
-        <td>${fmt.num(r.gaConversions)}</td>
-        <td style="color:#c4b5fd">${fmt.num(r.afInstalls)}</td>
-        <td style="color:#c4b5fd">${r.afCpa != null ? '$'+r.afCpa.toFixed(3) : '—'}</td>
-        <td style="color:#c4b5fd">${r.afRoas != null ? r.afRoas.toFixed(1)+'%' : '—'}</td>
-        <td style="color:#c4b5fd">${fmt.money(r.afCost)}</td>
-      </tr>`).join('');
+      afRows += `<tr class="af-header"><td colspan="${totalCols}" style="padding-left:10px">▸ AF by Channel</td></tr>`;
+      afRows += camp.afChannelRows.map(r => {
+        const prevAF = prev?.afChannelRows?.find(pr => pr.label === r.label);
+        const afPrevRow = _compareActive ? `<tr class="prev-row">
+          <td></td><td><em>prev month</em></td>
+          <td>${prevAF ? fmt.money(prevAF.gaSpend) : 'N/A'} ${delta(r.gaSpend, prevAF?.gaSpend, v => fmt.money(v))}</td>
+          <td>${prevAF ? fmt.num(prevAF.gaClicks) : 'N/A'}</td>
+          <td>${prevAF ? fmt.num(prevAF.gaImpressions) : 'N/A'}</td>
+          <td>${prevAF ? fmt.pct(prevAF.gaCtr) : 'N/A'}</td>
+          <td>—</td><td>—</td>
+          <td>${prevAF ? fmt.num(prevAF.gaConversions) : 'N/A'}</td>
+          <td>—</td>
+          <td style="color:#c4b5fd">${prevAF ? fmt.num(prevAF.afInstalls) : 'N/A'} ${prevAF ? delta(r.afInstalls, prevAF.afInstalls, v => fmt.num(v)) : ''}</td>
+          <td style="color:#c4b5fd">—</td>
+          <td style="color:#c4b5fd">${prevAF ? fmt.money(prevAF.afRevenue) : 'N/A'}</td>
+        </tr>` : '';
+        return `<tr class="af-row">
+          <td></td>
+          <td>${r.label}</td>
+          <td>${fmt.money(r.gaSpend)}</td>
+          <td>${fmt.num(r.gaClicks)}</td>
+          <td>${fmt.num(r.gaImpressions)}</td>
+          <td>${fmt.pct(r.gaCtr)}</td>
+          <td>—</td>
+          <td>—</td>
+          <td>${fmt.num(r.gaConversions)}</td>
+          <td>—</td>
+          <td style="color:#c4b5fd">${fmt.num(r.afInstalls)}</td>
+          <td style="color:#c4b5fd">${r.afCpa != null ? '$'+r.afCpa.toFixed(3) : '—'}</td>
+          <td style="color:#c4b5fd">${r.afRevenue > 0 ? fmt.money(r.afRevenue) : '—'}</td>
+        </tr>${afPrevRow}`;
+      }).join('');
     }
 
-    return totalRow + netRows + afRows;
+    return totalRow + prevTotalRow + netRows + afRows;
   }).join('');
 
   const tag    = data._fromDB  ? ' <span style="font-size:10px;color:var(--muted)">💾 cached</span>' : '';
   const afTag  = data._afFromDB ? ' <span style="font-size:10px;color:#a78bfa">AF cached</span>' : '';
-  const afHeaders = hasAF ? '<th style="color:#a78bfa">AF Installs</th><th style="color:#a78bfa">AF CPA</th><th style="color:#a78bfa">ROAS</th><th style="color:#a78bfa">AF Cost</th>' : '';
-  return `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Click a campaign row to view its assets.${tag}${afTag}</div>
+  const platformNote = data._platformNote ? `<span style="font-size:10px;color:var(--muted);margin-left:8px" title="${data._platformNote}">ⓘ GA: all platforms</span>` : '';
+  const cmpRange = _compareActive && _compareData ? ` <span style="font-size:10px;color:#a78bfa">vs ${_compareData.prevFrom}–${_compareData.prevTo}</span>` : '';
+  const afHeaders = hasAF ? '<th style="color:#a78bfa">AF Installs</th><th style="color:#a78bfa">AF CPA</th><th style="color:#a78bfa">AF Revenue</th>' : '';
+  return `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Click a campaign row to view its assets.${tag}${afTag}${platformNote}${cmpRange}</div>
   <div class="networks-table"><table>
     <thead><tr>
       <th style="width:28%">Campaign</th><th>Network</th>
-      <th>Spend</th><th>Clicks</th><th>Impressions</th><th>CTR</th><th>CPM</th><th>CPC</th><th>Conversions</th>
+      <th>Spend</th><th>Clicks</th><th>Impressions</th><th>CTR</th><th>CPM</th><th>CPC</th><th>Conversions</th><th>GA Revenue</th>
       ${afHeaders}
     </tr></thead>
     <tbody>${rows}</tbody>
@@ -705,10 +777,14 @@ async function loadNetworks() {
   const el   = document.getElementById('networks-main');
   el.innerHTML = '<div class="state"><div class="icon">⏳</div><p>Loading network breakdown…</p></div>';
   try {
-    const res  = await fetch(`/api/networks?from=${from}&to=${to}`, { signal: ctrl.signal });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Unknown error');
+    const fetchMain    = fetch(`/api/networks?from=${from}&to=${to}`, { signal: ctrl.signal }).then(r => r.json());
+    const fetchCompare = _compareActive
+      ? fetch(`/api/networks-compare?from=${from}&to=${to}`, { signal: ctrl.signal }).then(r => r.json())
+      : Promise.resolve(null);
+    const [data, cmp] = await Promise.all([fetchMain, fetchCompare]);
+    if (data.error) throw new Error(data.error);
     if (data._afDebug) console.log('[AF debug]', data._afDebug);
+    _compareData = cmp && !cmp.error ? cmp : null;
     el.innerHTML = buildNetworksTable(data);
   } catch(err) {
     if (err.name === 'AbortError') return;
@@ -716,6 +792,13 @@ async function loadNetworks() {
   } finally {
     if (_networksFetch === ctrl) _networksFetch = null;
   }
+}
+
+function toggleCompare() {
+  _compareActive = !_compareActive;
+  const btn = document.getElementById('compareToggleBtn');
+  if (btn) btn.classList.toggle('active', _compareActive);
+  loadNetworks();
 }
 
 // ── Asset modal ───────────────────────────────────────────
@@ -805,21 +888,65 @@ function buildAssetsModal(data) {
     <div class="asset-tabs">
       <button class="asset-tab active" id="assetTabBtnLive" onclick="switchAssetTab('live')">Live <span class="asset-tab-count">${liveCount}</span></button>
       <button class="asset-tab" id="assetTabBtnStopped" onclick="switchAssetTab('paused')">Stopped <span class="asset-tab-count">${pausedCount}</span></button>
+      <button class="asset-tab" id="assetTabBtnHistory" onclick="switchAssetTab('history')">History</button>
     </div>
     <div id="assetTabLive">${renderSections('live')}</div>
     <div id="assetTabStopped" style="display:none">${renderSections('paused')}</div>
+    <div id="assetTabHistory" style="display:none"><div class="state"><div class="icon">⏳</div><p>Loading history…</p></div></div>
   `;
 }
 
 function switchAssetTab(tab) {
-  document.getElementById('assetTabLive').style.display    = tab === 'live'   ? '' : 'none';
-  document.getElementById('assetTabStopped').style.display = tab === 'paused' ? '' : 'none';
+  document.getElementById('assetTabLive').style.display    = tab === 'live'    ? '' : 'none';
+  document.getElementById('assetTabStopped').style.display = tab === 'paused'  ? '' : 'none';
+  document.getElementById('assetTabHistory').style.display = tab === 'history' ? '' : 'none';
   document.getElementById('assetTabBtnLive').classList.toggle('active',    tab === 'live');
   document.getElementById('assetTabBtnStopped').classList.toggle('active', tab === 'paused');
+  document.getElementById('assetTabBtnHistory').classList.toggle('active', tab === 'history');
+  if (tab === 'history' && _currentCampaignId) loadAssetHistory(_currentCampaignId);
+}
+
+async function loadAssetHistory(campaignId) {
+  const el = document.getElementById('assetTabHistory');
+  if (!el) return;
+  el.innerHTML = '<div class="state"><div class="icon">⏳</div><p>Loading history…</p></div>';
+  try {
+    const res  = await fetch(`/api/assets?campaignId=${campaignId}&history=1`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unknown error');
+    const hist = data.history || [];
+    if (!hist.length) {
+      el.innerHTML = '<div class="state"><p style="color:var(--muted)">No change events recorded yet.</p></div>';
+      return;
+    }
+    const changeLabel = t => ({ added:'Added', paused:'Paused', resumed:'Resumed', performance_changed:'Performance Changed' }[t] || t);
+    const changeColor = t => ({ added:'#4ade80', paused:'#f87171', resumed:'#60a5fa', performance_changed:'#fbbf24' }[t] || 'var(--muted)');
+    const rows = hist.map(h => {
+      const oldLabel = h.oldValue?.performanceLabel || '—';
+      const newLabel = h.newValue?.performanceLabel || '—';
+      const diff = h.changeType === 'performance_changed'
+        ? `<span style="color:var(--muted)">${oldLabel}</span> → <span>${newLabel}</span>`
+        : `<span style="color:${changeColor(h.changeType)}">${h.newValue?.status||''}</span>`;
+      return `<tr>
+        <td style="white-space:nowrap">${h.effectiveDate}</td>
+        <td style="color:var(--muted);font-size:11px">${h.assetType}</td>
+        <td style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${(h.assetName||'').replace(/"/g,'&quot;')}">${h.assetName||h.assetKey}</td>
+        <td><span style="color:${changeColor(h.changeType)}">${changeLabel(h.changeType)}</span></td>
+        <td>${diff}</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `<div class="asset-table-wrap"><table class="asset-table">
+      <thead><tr><th>Date</th><th>Type</th><th>Asset</th><th>Change</th><th>Detail</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  } catch(err) {
+    el.innerHTML = `<div class="error-msg">❌ ${err.message}</div>`;
+  }
 }
 
 async function openAssets(campaignId, campaignName) {
   if (!campaignId) return;
+  _currentCampaignId = campaignId;
   const modal = document.getElementById('assetModal');
   const body  = document.getElementById('assetModalBody');
   const title = document.getElementById('assetModalTitle');
@@ -868,6 +995,16 @@ function showPage(page, btn) {
   // Hide dashboard-only controls when on notes or networks
   const dashOnly = document.querySelector('.metric-bar');
   dashOnly.style.display = page === 'dashboard' ? '' : 'none';
+
+  // Lock platform filter on Networks tab (GA has no device dimension)
+  const osFilter = document.getElementById('osFilter');
+  if (page === 'networks') {
+    osFilter.classList.add('locked');
+    osFilter.querySelectorAll('.btn:not(:first-child)').forEach(b => b.setAttribute('title', 'Platform split unavailable for network data (GA has no device breakdown)'));
+  } else {
+    osFilter.classList.remove('locked');
+    osFilter.querySelectorAll('.btn:not(:first-child)').forEach(b => b.removeAttribute('title'));
+  }
 
   if (page === 'notes')    loadNotes();
   if (page === 'networks') loadNetworks();
