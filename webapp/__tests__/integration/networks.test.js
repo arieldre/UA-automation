@@ -2,10 +2,12 @@ const express  = require('express');
 const supertest = require('supertest');
 
 jest.mock('../../db', () => ({
-  getMissingNetworksDates: jest.fn(),
-  storeNetworksByDate:     jest.fn().mockResolvedValue(undefined),
-  getNetworksByDate:       jest.fn(),
-  getCampaigns:            jest.fn(),
+  getMissingNetworksDates:  jest.fn(),
+  storeNetworksByDate:      jest.fn().mockResolvedValue(undefined),
+  getNetworksByDate:        jest.fn(),
+  getCampaigns:             jest.fn(),
+  getAFNetworkChannels:     jest.fn().mockResolvedValue(null),
+  storeAFNetworkChannels:   jest.fn().mockResolvedValue(undefined),
 }));
 
 const db = require('../../db');
@@ -65,6 +67,7 @@ describe('GET /api/networks — DB cache hit', () => {
     db.getMissingNetworksDates.mockResolvedValue([]);
     db.getNetworksByDate.mockResolvedValue(MOCK_NET_BY_DATE);
     db.getCampaigns.mockResolvedValue([{ name: 'CampA', id: '123' }]);
+    db.getAFNetworkChannels.mockResolvedValue({ 'ACI_Search': { installs: 100, cost: 50, revenue: 200 } });
   });
 
   test('returns 200 with _fromDB: true', async () => {
@@ -75,7 +78,8 @@ describe('GET /api/networks — DB cache hit', () => {
 
   test('does not call the GA API', async () => {
     await request.get('/api/networks?from=2026-03-01&to=2026-03-01');
-    expect(global.fetch).not.toHaveBeenCalled();
+    const gaCalls = (global.fetch.mock.calls || []).filter(([url]) => url?.includes('googleads.googleapis.com'));
+    expect(gaCalls).toHaveLength(0);
   });
 
   test('returns correct campaign structure', async () => {

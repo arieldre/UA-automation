@@ -1,7 +1,8 @@
 require('dotenv').config();
-const { getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getCampaigns } = require('../db');
+const { getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getCampaigns, getAFNetworkChannels, storeAFNetworkChannels } = require('../db');
 
-const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN } = process.env;
+const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
+        APPSFLYER_TOKEN, APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
 
 let _cachedToken = null, _tokenExpiry = 0;
 async function getAccessToken() {
@@ -118,6 +119,117 @@ function aggregateNetworks(networksByDate, campaignIds) {
   return campaigns;
 }
 
+// ── AppsFlyer channel mapping ─────────────────────────────────────────────────
+
+const GA_TO_AF_CHANNEL = {
+  SEARCH:          'ACI_Search',
+  SEARCH_PARTNERS: 'ACI_Search',
+  CONTENT:         'ACI_Display',
+  YOUTUBE_WATCH:   'ACI_Youtube',
+  YOUTUBE_SEARCH:  'ACI_Youtube',
+  YOUTUBE:         'ACI_Youtube',
+  MIXED:           'ACI_',
+};
+
+// AF channel display config: channel key → { label, gaNetworks }
+const AF_CHANNEL_CONFIG = [
+  { afChannel: 'ACI_Search',  label: 'Search',  gaNetworks: ['SEARCH', 'SEARCH_PARTNERS'] },
+  { afChannel: 'ACI_Display', label: 'Display', gaNetworks: ['CONTENT'] },
+  { afChannel: 'ACI_Youtube', label: 'YouTube', gaNetworks: ['YOUTUBE_WATCH', 'YOUTUBE_SEARCH', 'YOUTUBE'] },
+];
+
+async function fetchAFChannels(appId, from, to) {
+  if (!APPSFLYER_TOKEN || !appId) return { _afError: 'missing config' };
+  try {
+    const url = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/master_report/v4` +
+      `?api_token=${APPSFLYER_TOKEN}&from=${from}&to=${to}` +
+      `&groupings=af_channel&kpis=installs,cost,revenue&media_source=googleadwords_int`;
+    const r = await fetch(url);
+    const text = await r.text();
+    if (!r.ok || text.trim().startsWith('{')) return { _afError: text.substring(0, 200) };
+    return text;
+  } catch (e) {
+    return { _afError: e.message };
+  }
+}
+
+function parseAFChannels(raw) {
+  if (!raw || typeof raw !== 'string') return {};
+  const lines = raw.trim().split('\n').filter(Boolean);
+  if (lines.length < 2) return {};
+  const headers = lines[0].split(',').map(h => h.trim());
+  const chIdx  = headers.findIndex(h => h.toLowerCase().includes('channel'));
+  const inIdx  = headers.findIndex(h => h.toLowerCase() === 'installs');
+  const coIdx  = headers.findIndex(h => h.toLowerCase() === 'cost');
+  const reIdx  = headers.findIndex(h => h.toLowerCase() === 'revenue');
+  if (chIdx === -1) return {};
+
+  const result = {};
+  for (let i = 1; i < lines.length; i++) {
+    const cols    = lines[i].split(',');
+    const channel = cols[chIdx]?.trim();
+    if (!channel) continue;
+    result[channel] = {
+      installs: inIdx >= 0 ? (parseFloat(cols[inIdx]) || 0) : 0,
+      cost:     coIdx >= 0 ? (parseFloat(cols[coIdx]) || 0) : 0,
+      revenue:  reIdx >= 0 ? (parseFloat(cols[reIdx]) || 0) : 0,
+    };
+  }
+  return result;
+}
+
+function mergeAFChannelPlatforms(android, ios) {
+  const a = android || {}, b = ios || {};
+  const result = {};
+  for (const [ch, m] of Object.entries(a)) {
+    result[ch] = { installs: m.installs, cost: m.cost, revenue: m.revenue };
+  }
+  for (const [ch, m] of Object.entries(b)) {
+    if (!result[ch]) result[ch] = { installs: 0, cost: 0, revenue: 0 };
+    result[ch].installs += m.installs;
+    result[ch].cost     += m.cost;
+    result[ch].revenue  += m.revenue;
+  }
+  return result;
+}
+
+function buildAFChannelRows(campaign, afChannels) {
+  if (!afChannels) return [];
+  const rows = [];
+  for (const { afChannel, label, gaNetworks } of AF_CHANNEL_CONFIG) {
+    // Sum GA metrics for all GA networks that map to this AF channel
+    const gaNetworksInCamp = (campaign.networks || []).filter(n => gaNetworks.includes(n.network));
+    const gaSpend       = gaNetworksInCamp.reduce((s, n) => s + n.spend, 0);
+    const gaClicks      = gaNetworksInCamp.reduce((s, n) => s + n.clicks, 0);
+    const gaImpressions = gaNetworksInCamp.reduce((s, n) => s + n.impressions, 0);
+    const gaConversions = gaNetworksInCamp.reduce((s, n) => s + n.conversions, 0);
+
+    const af = afChannels[afChannel];
+    const afInstalls = af?.installs || 0;
+    const afCost     = af?.cost     || 0;
+    const afRevenue  = af?.revenue  || 0;
+
+    // Skip row if no GA data AND no AF installs
+    if (gaSpend === 0 && gaImpressions === 0 && afInstalls === 0) continue;
+
+    rows.push({
+      afChannel,
+      label,
+      gaSpend:       +gaSpend.toFixed(2),
+      gaClicks,
+      gaImpressions,
+      gaConversions: +gaConversions.toFixed(2),
+      gaCtr:         gaImpressions > 0 ? +((gaClicks / gaImpressions) * 100).toFixed(3) : null,
+      afInstalls,
+      afCost:        +afCost.toFixed(2),
+      afRevenue:     +afRevenue.toFixed(2),
+      afCpa:         afInstalls > 0 ? +(afCost / afInstalls).toFixed(4) : null,
+      afRoas:        afCost > 0     ? +((afRevenue / afCost) * 100).toFixed(2) : null,
+    });
+  }
+  return rows;
+}
+
 const handler = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -158,7 +270,38 @@ const handler = async function handler(req, res) {
     const networksByDate = await getNetworksByDate(from, to);
     const campaigns      = aggregateNetworks(networksByDate, campaignIds);
 
-    res.json({ from, to, campaigns, _fromDB: missing.length === 0 });
+    // ── AF channel data ───────────────────────────────────────────────────────
+    let afChannels     = null;
+    let _afFromDB      = false;
+    const androidId    = APPSFLYER_ANDROID_APP_ID;
+    const iosId        = APPSFLYER_IOS_APP_ID;
+
+    if (androidId && iosId) {
+      const cached = await getAFNetworkChannels(androidId, from, to);
+      if (cached) {
+        afChannels = cached;
+        _afFromDB  = true;
+      } else {
+        const [rawAndroid, rawIos] = await Promise.all([
+          fetchAFChannels(androidId, from, to),
+          fetchAFChannels(iosId, from, to),
+        ]);
+        const parsedAndroid = parseAFChannels(rawAndroid);
+        const parsedIos     = parseAFChannels(rawIos);
+        afChannels = mergeAFChannelPlatforms(parsedAndroid, parsedIos);
+        if (Object.keys(afChannels).length > 0) {
+          await storeAFNetworkChannels(androidId, from, to, afChannels);
+        }
+      }
+    }
+
+    // Attach AF channel rows to each campaign
+    const campaignsWithAF = campaigns.map(camp => ({
+      ...camp,
+      afChannelRows: buildAFChannelRows(camp, afChannels),
+    }));
+
+    res.json({ from, to, campaigns: campaignsWithAF, _fromDB: missing.length === 0, _afFromDB });
   } catch (err) {
     console.error('[networks]', err);
     res.status(500).json({ error: err.message });
@@ -166,4 +309,4 @@ const handler = async function handler(req, res) {
 };
 
 module.exports = handler;
-module.exports._test = { processNetworkResults, aggregateNetworks };
+module.exports._test = { processNetworkResults, aggregateNetworks, parseAFChannels, mergeAFChannelPlatforms, buildAFChannelRows };

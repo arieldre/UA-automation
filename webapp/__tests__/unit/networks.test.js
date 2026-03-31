@@ -1,5 +1,5 @@
 const networkHandler = require('../../api/networks');
-const { processNetworkResults, aggregateNetworks } = networkHandler._test;
+const { processNetworkResults, aggregateNetworks, parseAFChannels, mergeAFChannelPlatforms, buildAFChannelRows } = networkHandler._test;
 
 // ─── processNetworkResults ────────────────────────────────────────────────────
 
@@ -228,5 +228,156 @@ describe('aggregateNetworks', () => {
     };
     const [camp] = aggregateNetworks(networksByDate, {});
     expect(camp.campaignId).toBeNull();
+  });
+});
+
+// ─── parseAFChannels ──────────────────────────────────────────────────────────
+
+describe('parseAFChannels', () => {
+  test('parses valid CSV into channel map', () => {
+    const csv = `AF Channel,Installs,Cost,Revenue\nACI_Search,100,50.5,200\nACI_Display,200,80.0,150\n`;
+    const result = parseAFChannels(csv);
+    expect(result['ACI_Search']).toEqual({ installs: 100, cost: 50.5, revenue: 200 });
+    expect(result['ACI_Display']).toEqual({ installs: 200, cost: 80.0, revenue: 150 });
+  });
+
+  test('returns empty object for empty CSV (header only)', () => {
+    const csv = `AF Channel,Installs,Cost,Revenue\n`;
+    expect(parseAFChannels(csv)).toEqual({});
+  });
+
+  test('returns empty object for error wrapper input', () => {
+    expect(parseAFChannels({ _afError: 'some error' })).toEqual({});
+  });
+
+  test('returns empty object for null/undefined', () => {
+    expect(parseAFChannels(null)).toEqual({});
+    expect(parseAFChannels(undefined)).toEqual({});
+  });
+
+  test('handles missing Cost/Revenue columns gracefully (defaults to 0)', () => {
+    const csv = `AF Channel,Installs\nACI_Search,50\n`;
+    const result = parseAFChannels(csv);
+    expect(result['ACI_Search'].installs).toBe(50);
+    expect(result['ACI_Search'].cost).toBe(0);
+    expect(result['ACI_Search'].revenue).toBe(0);
+  });
+
+  test('skips rows with empty channel name', () => {
+    const csv = `AF Channel,Installs,Cost,Revenue\n,100,50,200\nACI_Youtube,300,120,400\n`;
+    const result = parseAFChannels(csv);
+    expect(Object.keys(result)).toEqual(['ACI_Youtube']);
+  });
+});
+
+// ─── mergeAFChannelPlatforms ──────────────────────────────────────────────────
+
+describe('mergeAFChannelPlatforms', () => {
+  test('sums same channel keys across two platforms', () => {
+    const android = { 'ACI_Search': { installs: 100, cost: 50, revenue: 200 } };
+    const ios     = { 'ACI_Search': { installs:  50, cost: 25, revenue: 100 } };
+    const result  = mergeAFChannelPlatforms(android, ios);
+    expect(result['ACI_Search'].installs).toBe(150);
+    expect(result['ACI_Search'].cost).toBe(75);
+    expect(result['ACI_Search'].revenue).toBe(300);
+  });
+
+  test('includes channel present in only one platform', () => {
+    const android = { 'ACI_Display': { installs: 200, cost: 80, revenue: 150 } };
+    const ios     = {};
+    const result  = mergeAFChannelPlatforms(android, ios);
+    expect(result['ACI_Display'].installs).toBe(200);
+  });
+
+  test('handles both empty', () => {
+    expect(mergeAFChannelPlatforms({}, {})).toEqual({});
+  });
+
+  test('handles null inputs', () => {
+    const result = mergeAFChannelPlatforms(null, null);
+    expect(result).toEqual({});
+  });
+});
+
+// ─── buildAFChannelRows ───────────────────────────────────────────────────────
+
+describe('buildAFChannelRows', () => {
+  function mkCamp(networks) {
+    // networks: [{ network, spend, clicks, impressions, conversions, ... }]
+    const total = networks.reduce((a, n) => {
+      a.spend += n.spend; a.clicks += n.clicks; a.impressions += n.impressions; a.conversions += n.conversions;
+      return a;
+    }, { spend: 0, clicks: 0, impressions: 0, conversions: 0 });
+    return { campaignName: 'CampA', campaignId: '1', networks, total };
+  }
+
+  const afChannels = {
+    'ACI_Search':  { installs: 100, cost: 50,  revenue: 500 },
+    'ACI_Display': { installs: 200, cost: 80,  revenue: 300 },
+    'ACI_Youtube': { installs:  50, cost: 25,  revenue: 200 },
+  };
+
+  test('produces 3 AF rows for Search/Display/YouTube when all channels present', () => {
+    const camp = mkCamp([
+      { network: 'SEARCH',       spend: 100, clicks: 500, impressions: 10000, conversions: 5 },
+      { network: 'CONTENT',      spend: 200, clicks: 800, impressions: 20000, conversions: 8 },
+      { network: 'YOUTUBE_WATCH',spend: 150, clicks: 600, impressions: 15000, conversions: 3 },
+    ]);
+    const rows = buildAFChannelRows(camp, afChannels);
+    expect(rows).toHaveLength(3);
+    const labels = rows.map(r => r.afChannel);
+    expect(labels).toContain('ACI_Search');
+    expect(labels).toContain('ACI_Display');
+    expect(labels).toContain('ACI_Youtube');
+  });
+
+  test('AF installs, CPA and ROAS are accurate (not prorated)', () => {
+    const camp = mkCamp([
+      { network: 'SEARCH', spend: 100, clicks: 500, impressions: 10000, conversions: 5 },
+    ]);
+    const rows = buildAFChannelRows(camp, afChannels);
+    const searchRow = rows.find(r => r.afChannel === 'ACI_Search');
+    expect(searchRow.afInstalls).toBe(100);
+    expect(searchRow.afCpa).toBeCloseTo(50 / 100, 4);
+    expect(searchRow.afRoas).toBeCloseTo((500 / 50) * 100, 1);
+  });
+
+  test('returns empty array when afChannels is null', () => {
+    const camp = mkCamp([{ network: 'SEARCH', spend: 100, clicks: 5, impressions: 100, conversions: 0 }]);
+    expect(buildAFChannelRows(camp, null)).toEqual([]);
+  });
+
+  test('SEARCH and SEARCH_PARTNERS GA spend both go to ACI_Search row', () => {
+    const camp = mkCamp([
+      { network: 'SEARCH',          spend: 60, clicks: 300, impressions: 6000, conversions: 3 },
+      { network: 'SEARCH_PARTNERS', spend: 40, clicks: 200, impressions: 4000, conversions: 2 },
+    ]);
+    const rows = buildAFChannelRows(camp, afChannels);
+    const searchRow = rows.find(r => r.afChannel === 'ACI_Search');
+    expect(searchRow.gaSpend).toBeCloseTo(100); // 60 + 40
+    expect(searchRow.gaClicks).toBe(500);
+  });
+
+  test('YOUTUBE_WATCH and YOUTUBE_SEARCH both map to ACI_Youtube', () => {
+    const camp = mkCamp([
+      { network: 'YOUTUBE_WATCH',  spend: 100, clicks: 400, impressions: 8000, conversions: 2 },
+      { network: 'YOUTUBE_SEARCH', spend:  50, clicks: 200, impressions: 4000, conversions: 1 },
+    ]);
+    const rows = buildAFChannelRows(camp, afChannels);
+    const ytRow = rows.find(r => r.afChannel === 'ACI_Youtube');
+    expect(ytRow.gaSpend).toBeCloseTo(150);
+  });
+
+  test('omits channel rows where GA has no data and AF channel has no installs', () => {
+    const camp = mkCamp([
+      { network: 'SEARCH', spend: 100, clicks: 500, impressions: 10000, conversions: 5 },
+      // No CONTENT or YOUTUBE network rows
+    ]);
+    const emptyAF = { 'ACI_Search': { installs: 100, cost: 50, revenue: 200 } };
+    const rows = buildAFChannelRows(camp, emptyAF);
+    // Should only include ACI_Search since others have no GA data and no AF installs
+    const channels = rows.map(r => r.afChannel);
+    expect(channels).not.toContain('ACI_Display');
+    expect(channels).not.toContain('ACI_Youtube');
   });
 });

@@ -185,6 +185,41 @@ async function storeAssets(campaignId, from, to, data) {
   );
 }
 
+// ── AF Network channel cache (collection: af_network_cache, keyed by appId_from_to) ─
+
+async function getAFNetworkChannels(appId, from, to) {
+  const db  = await connect();
+  const doc = await db.collection('af_network_cache').findOne({ _id: `${appId}_${from}_${to}` });
+  if (!doc) return null;
+  if (Date.now() - new Date(doc.fetched_at).getTime() > 86400000) return null; // 24h TTL
+  return doc.channels;
+}
+
+async function storeAFNetworkChannels(appId, from, to, channels) {
+  const db = await connect();
+  await db.collection('af_network_cache').updateOne(
+    { _id: `${appId}_${from}_${to}` },
+    { $set: { appId, from, to, channels, fetched_at: new Date().toISOString() } },
+    { upsert: true }
+  );
+}
+
+// ── Asset state (collection: campaign_assets_state, keyed by campaignId) ─
+
+async function getAssetState(campaignId) {
+  const db = await connect();
+  return db.collection('campaign_assets_state').findOne({ _id: campaignId });
+}
+
+async function storeAssetState(campaignId, doc) {
+  const db = await connect();
+  await db.collection('campaign_assets_state').findOneAndReplace(
+    { _id: campaignId, lastChecked: { $ne: doc.lastChecked } },
+    { _id: campaignId, ...doc },
+    { upsert: true }
+  );
+}
+
 // ── Campaign list (collection: campaigns, single doc with 24h TTL) ─
 
 async function getCampaigns() {
@@ -204,4 +239,4 @@ async function storeCampaigns(data) {
   );
 }
 
-module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getAssets, storeAssets, getCampaigns, storeCampaigns };
+module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getAssets, storeAssets, getCampaigns, storeCampaigns, getAFNetworkChannels, storeAFNetworkChannels, getAssetState, storeAssetState };

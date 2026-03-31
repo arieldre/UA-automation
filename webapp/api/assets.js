@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { getAssets, storeAssets } = require('../db');
+const { getAssets, storeAssets, getAssetState, storeAssetState } = require('../db');
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN } = process.env;
 
@@ -108,6 +108,46 @@ function processAssetResults(results) {
   return { video, image, text };
 }
 
+function computeAssetStateDiff(prevStateAssets, freshAssets, today) {
+  const result = {};
+  for (const type of ['video', 'image', 'text']) {
+    const prev  = prevStateAssets?.[type] || [];
+    const fresh = freshAssets?.[type] || [];
+
+    const prevMap  = {};
+    for (const a of prev)  prevMap[`${a.id}_${a.fieldType}`]  = a;
+    const freshMap = {};
+    for (const a of fresh) freshMap[`${a.id}_${a.fieldType}`] = a;
+
+    const merged = [];
+
+    // Fresh assets: new or updated
+    for (const [key, fa] of Object.entries(freshMap)) {
+      const pa = prevMap[key];
+      merged.push({
+        ...fa,
+        status:      'live',
+        pausedAt:    null,
+        firstSeenAt: pa ? pa.firstSeenAt : today,
+        lastSeenAt:  today,
+      });
+    }
+
+    // Prev assets not in fresh: paused or already paused
+    for (const [key, pa] of Object.entries(prevMap)) {
+      if (freshMap[key]) continue;
+      merged.push({
+        ...pa,
+        status:   pa.status === 'paused' ? 'paused' : 'paused',
+        pausedAt: pa.status === 'paused' ? pa.pausedAt : today,
+      });
+    }
+
+    result[type] = merged;
+  }
+  return result;
+}
+
 const handler = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -118,8 +158,42 @@ const handler = async function handler(req, res) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return res.status(400).json({ error: 'Invalid date format' });
 
   try {
+    const today = new Date().toISOString().split('T')[0];
+
+    // ── Daily state refresh (independent of date-range cache) ──
+    const prevState = await getAssetState(campaignId);
+    let stateDoc = prevState;
+    if (!prevState || prevState.lastChecked !== today) {
+      const stateFrom = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+      const stateTo   = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const token30   = await getAccessToken();
+      const rawState  = await gaQuery(token30, `
+        SELECT
+          campaign.name, ad_group.name,
+          asset.id, asset.name, asset.type,
+          asset.youtube_video_asset.youtube_video_id,
+          asset.image_asset.full_size.url,
+          asset.text_asset.text,
+          ad_group_ad_asset_view.performance_label,
+          ad_group_ad_asset_view.field_type,
+          ad_group_ad_asset_view.enabled,
+          metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions
+        FROM ad_group_ad_asset_view
+        WHERE campaign.id = '${campaignId}'
+          AND segments.date BETWEEN '${stateFrom}' AND '${stateTo}'
+      `);
+      if (!rawState.error) {
+        const stateCampName  = rawState.results?.[0]?.campaign?.name || prevState?.campaignName || '';
+        const freshAssets    = processAssetResults((rawState.results || []).filter(r => r.adGroupAdAssetView?.enabled !== false));
+        const mergedAssets   = computeAssetStateDiff(prevState?.assets, freshAssets, today);
+        stateDoc = { campaignId, campaignName: stateCampName, assets: mergedAssets, lastChecked: today };
+        await storeAssetState(campaignId, stateDoc);
+      }
+    }
+
+    // ── Date-range cache (user's requested window) ──
     const cached = await getAssets(campaignId, from, to);
-    if (cached) return res.json({ _fromDB: true, ...cached });
+    if (cached) return res.json({ _fromDB: true, ...cached, state: stateDoc?.assets || null });
 
     const token = await getAccessToken();
     const raw   = await gaQuery(token, `
@@ -144,7 +218,7 @@ const handler = async function handler(req, res) {
     const assets = processAssetResults(raw.results || []);
 
     await storeAssets(campaignId, from, to, { campaignName, assets });
-    res.json({ _fromDB: false, campaignName, assets });
+    res.json({ _fromDB: false, campaignName, assets, state: stateDoc?.assets || null });
   } catch (err) {
     console.error('[assets]', err);
     res.status(500).json({ error: err.message });
@@ -152,4 +226,4 @@ const handler = async function handler(req, res) {
 };
 
 module.exports = handler;
-module.exports._test = { processAssetResults, orientationFromFieldType };
+module.exports._test = { processAssetResults, orientationFromFieldType, computeAssetStateDiff };

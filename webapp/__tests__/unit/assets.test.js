@@ -1,5 +1,5 @@
 const assetsHandler = require('../../api/assets');
-const { processAssetResults, orientationFromFieldType } = assetsHandler._test;
+const { processAssetResults, orientationFromFieldType, computeAssetStateDiff } = assetsHandler._test;
 
 // ─── orientationFromFieldType ─────────────────────────────────────────────────
 
@@ -198,5 +198,132 @@ describe('processAssetResults', () => {
     const row = mkRow('1', 'SOME_UNKNOWN_TYPE');
     const { video, image, text } = processAssetResults([row]);
     expect([...video, ...image, ...text]).toHaveLength(0);
+  });
+});
+
+// ─── computeAssetStateDiff ────────────────────────────────────────────────────
+
+describe('computeAssetStateDiff', () => {
+  const today = '2026-03-31';
+
+  function mkAsset(id, fieldType, overrides = {}) {
+    return {
+      id, fieldType,
+      performanceLabel: 'GOOD',
+      name: `Asset ${id}`,
+      impressions: 1000, clicks: 50, spend: 10, conversions: 5,
+      ...overrides,
+    };
+  }
+
+  function mkStateAsset(id, fieldType, status, pausedAt, firstSeenAt, overrides = {}) {
+    return {
+      id, fieldType,
+      performanceLabel: 'GOOD',
+      name: `Asset ${id}`,
+      impressions: 1000, clicks: 50, spend: 10, conversions: 5,
+      status, pausedAt, firstSeenAt, lastSeenAt: firstSeenAt,
+      ...overrides,
+    };
+  }
+
+  test('brand new asset gets status live, firstSeenAt = today', () => {
+    const result = computeAssetStateDiff(
+      { video: [], image: [], text: [] },
+      { video: [mkAsset('1', 'YOUTUBE_VIDEO')], image: [], text: [] },
+      today
+    );
+    expect(result.video).toHaveLength(1);
+    expect(result.video[0].status).toBe('live');
+    expect(result.video[0].pausedAt).toBeNull();
+    expect(result.video[0].firstSeenAt).toBe(today);
+    expect(result.video[0].lastSeenAt).toBe(today);
+  });
+
+  test('existing live asset: metrics updated, firstSeenAt preserved', () => {
+    const prev = { video: [mkStateAsset('1', 'YOUTUBE_VIDEO', 'live', null, '2026-03-01')], image: [], text: [] };
+    const fresh = { video: [mkAsset('1', 'YOUTUBE_VIDEO', { impressions: 9999, clicks: 200 })], image: [], text: [] };
+    const result = computeAssetStateDiff(prev, fresh, today);
+    expect(result.video[0].status).toBe('live');
+    expect(result.video[0].firstSeenAt).toBe('2026-03-01');
+    expect(result.video[0].lastSeenAt).toBe(today);
+    expect(result.video[0].impressions).toBe(9999);
+    expect(result.video[0].clicks).toBe(200);
+  });
+
+  test('live asset that disappears gets paused with pausedAt = today', () => {
+    const prev = { video: [mkStateAsset('1', 'YOUTUBE_VIDEO', 'live', null, '2026-03-01')], image: [], text: [] };
+    const result = computeAssetStateDiff(prev, { video: [], image: [], text: [] }, today);
+    expect(result.video[0].status).toBe('paused');
+    expect(result.video[0].pausedAt).toBe(today);
+  });
+
+  test('already-paused asset stays paused if still absent, pausedAt unchanged', () => {
+    const pausedAt = '2026-03-25';
+    const prev = { video: [mkStateAsset('1', 'YOUTUBE_VIDEO', 'paused', pausedAt, '2026-03-01')], image: [], text: [] };
+    const result = computeAssetStateDiff(prev, { video: [], image: [], text: [] }, today);
+    expect(result.video[0].status).toBe('paused');
+    expect(result.video[0].pausedAt).toBe(pausedAt);
+  });
+
+  test('paused asset reappears: status live, pausedAt cleared, firstSeenAt preserved', () => {
+    const prev = { video: [mkStateAsset('1', 'YOUTUBE_VIDEO', 'paused', '2026-03-25', '2026-03-01')], image: [], text: [] };
+    const fresh = { video: [mkAsset('1', 'YOUTUBE_VIDEO')], image: [], text: [] };
+    const result = computeAssetStateDiff(prev, fresh, today);
+    expect(result.video[0].status).toBe('live');
+    expect(result.video[0].pausedAt).toBeNull();
+    expect(result.video[0].firstSeenAt).toBe('2026-03-01');
+    expect(result.video[0].lastSeenAt).toBe(today);
+  });
+
+  test('empty prevState: all fresh assets get status live', () => {
+    const fresh = {
+      video: [mkAsset('1', 'YOUTUBE_VIDEO')],
+      image: [mkAsset('2', 'MARKETING_IMAGE')],
+      text:  [mkAsset('3', 'HEADLINE')],
+    };
+    const result = computeAssetStateDiff({ video: [], image: [], text: [] }, fresh, today);
+    expect(result.video[0].status).toBe('live');
+    expect(result.image[0].status).toBe('live');
+    expect(result.text[0].status).toBe('live');
+  });
+
+  test('empty freshAssets: all live prev assets become paused', () => {
+    const prev = {
+      video: [mkStateAsset('1', 'YOUTUBE_VIDEO', 'live', null, '2026-03-01')],
+      image: [mkStateAsset('2', 'MARKETING_IMAGE', 'live', null, '2026-03-01')],
+      text:  [],
+    };
+    const result = computeAssetStateDiff(prev, { video: [], image: [], text: [] }, today);
+    expect(result.video[0].status).toBe('paused');
+    expect(result.image[0].status).toBe('paused');
+  });
+
+  test('video, image, text types handled independently', () => {
+    const prev = {
+      video: [mkStateAsset('1', 'YOUTUBE_VIDEO', 'live', null, '2026-03-01')],
+      image: [],
+      text:  [mkStateAsset('3', 'HEADLINE', 'live', null, '2026-03-01')],
+    };
+    const fresh = {
+      video: [],
+      image: [mkAsset('2', 'MARKETING_IMAGE')],
+      text:  [mkAsset('3', 'HEADLINE')],
+    };
+    const result = computeAssetStateDiff(prev, fresh, today);
+    expect(result.video[0].status).toBe('paused');   // was live, now gone
+    expect(result.image[0].status).toBe('live');      // brand new
+    expect(result.text[0].status).toBe('live');       // still present
+  });
+
+  test('key is assetId_fieldType — same id different fieldType are independent', () => {
+    const prev = { video: [mkStateAsset('1', 'YOUTUBE_VIDEO', 'live', null, '2026-03-01')], image: [], text: [] };
+    const fresh = { video: [mkAsset('1', 'PORTRAIT_YOUTUBE_VIDEO')], image: [], text: [] };
+    const result = computeAssetStateDiff(prev, fresh, today);
+    // YOUTUBE_VIDEO gone → paused; PORTRAIT_YOUTUBE_VIDEO → new live
+    const paused = result.video.find(a => a.fieldType === 'YOUTUBE_VIDEO');
+    const live   = result.video.find(a => a.fieldType === 'PORTRAIT_YOUTUBE_VIDEO');
+    expect(paused.status).toBe('paused');
+    expect(live.status).toBe('live');
   });
 });

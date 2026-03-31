@@ -2,8 +2,10 @@ const express  = require('express');
 const supertest = require('supertest');
 
 jest.mock('../../db', () => ({
-  getAssets:   jest.fn(),
-  storeAssets: jest.fn().mockResolvedValue(undefined),
+  getAssets:       jest.fn(),
+  storeAssets:     jest.fn().mockResolvedValue(undefined),
+  getAssetState:   jest.fn().mockResolvedValue({ lastChecked: new Date().toISOString().split('T')[0], assets: { video: [], image: [], text: [] }, campaignId: '123', campaignName: 'CampA' }),
+  storeAssetState: jest.fn().mockResolvedValue(undefined),
 }));
 
 const db = require('../../db');
