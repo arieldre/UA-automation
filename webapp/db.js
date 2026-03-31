@@ -206,6 +206,22 @@ async function storeAFChannelForDate(appId, date, channels) {
   );
 }
 
+async function getAFDailyBreakdown(androidId, iosId, from, to) {
+  const db   = await connect();
+  const dates = getDatesInRange(from, to);
+  const ids   = [
+    ...dates.map(d => `${androidId}_${d}`),
+    ...dates.map(d => `${iosId}_${d}`)
+  ];
+  const docs = await db.collection('af_channels_daily').find({ _id: { $in: ids } }).toArray();
+  const result = { android: {}, ios: {} };
+  for (const doc of docs) {
+    const platform = doc.appId === androidId ? 'android' : 'ios';
+    result[platform][doc.date] = doc.channels || {};
+  }
+  return result;
+}
+
 async function getAFChannelsForRange(appId, from, to) {
   const db   = await connect();
   const dates = getDatesInRange(from, to);
@@ -275,4 +291,4 @@ async function storeCampaigns(data) {
   );
 }
 
-module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getAssets, storeAssets, getCampaigns, storeCampaigns, getMissingAFChannelDates, storeAFChannelForDate, getAFChannelsForRange, getAssetState, storeAssetState, appendAssetChanges, getAssetHistory };
+module.exports = { connect, getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getMissingNetworksDates, storeNetworksByDate, getNetworksByDate, getAssets, storeAssets, getCampaigns, storeCampaigns, getMissingAFChannelDates, storeAFChannelForDate, getAFChannelsForRange, getAFDailyBreakdown, getAssetState, storeAssetState, appendAssetChanges, getAssetHistory };

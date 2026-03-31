@@ -4,12 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Urban Heat — Ad Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <style>
 :root {
   --bg:#0d0d14; --surface:#16161f; --surface2:#1e1e2a; --border:#2a2a38;
   --text:#e2e2f0; --muted:#6b6b88; --accent:#7c6fff;
   --green:#22c55e; --red:#ef4444; --green-bg:rgba(34,197,94,.08); --red-bg:rgba(239,68,68,.08);
 }
+/* ── Light theme overrides ── */
+[data-theme="light"] {
+  --bg:#f4f4f8; --surface:#ffffff; --surface2:#ebebf3; --border:#d8d8e8; --text:#1a1a2e;
+}
+[data-theme="light"] input[type=date]::-webkit-calendar-picker-indicator{filter:none}
+[data-theme="light"] select{color-scheme:light}
+/* ── Graph metric checkboxes ── */
+.graph-metric-label{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:6px;white-space:nowrap;user-select:none}
+.graph-metric-label:hover{border-color:var(--accent);color:var(--accent)}
+.graph-metric-label input{accent-color:var(--accent);cursor:pointer}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px}
 
@@ -207,6 +218,7 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
   <input type="date" id="toDate">
   <button class="btn icon" id="refreshBtn" onclick="loadReport(true)" title="Force refresh from API">↻</button>
   <span id="cacheTag" style="display:none;font-size:11px;color:var(--muted);white-space:nowrap"></span>
+  <button id="themeToggleBtn" class="btn icon" onclick="toggleTheme()" title="Toggle light/dark mode">☀️</button>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dashboard',this)">Dashboard</button>
     <button class="nav-tab" onclick="showPage('networks',this)">Networks</button>
@@ -242,11 +254,40 @@ main{max-width:1200px;margin:0 auto;padding:20px 24px}
 </div>
 
 <div id="page-networks" class="page">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <button id="compareToggleBtn" class="btn" onclick="toggleCompare()" title="Show previous full calendar month alongside current data">vs Last Month</button>
+    <div id="compareCampaignPanel" style="display:none;align-items:center;gap:6px">
+      <span style="font-size:12px;color:var(--muted)">vs Campaign:</span>
+      <select id="compareCampaignSelect" class="btn" style="font-size:12px;padding:4px 8px" onchange="onCompareCampaignChange()">
+        <option value="">— none —</option>
+      </select>
+    </div>
   </div>
   <div id="networks-main">
     <div class="state"><div class="icon">🌐</div><p>Click "Networks" tab to load.</p></div>
+  </div>
+  <div id="graphPanel" style="margin-top:24px">
+    <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">
+      AF Performance — Daily Trends
+      <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:6px">(combined all campaigns)</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+      <span style="font-size:12px;color:var(--muted)">Metrics (max 4):</span>
+      <label class="graph-metric-label"><input type="checkbox" value="installs" checked> Installs</label>
+      <label class="graph-metric-label"><input type="checkbox" value="cost"> Cost</label>
+      <label class="graph-metric-label"><input type="checkbox" value="revenue"> Revenue</label>
+      <label class="graph-metric-label"><input type="checkbox" value="cpa"> CPA</label>
+      <label class="graph-metric-label"><input type="checkbox" value="roas"> ROAS</label>
+      <span style="width:1px;height:18px;background:var(--border);margin:0 4px;flex-shrink:0"></span>
+      <span style="font-size:12px;color:var(--muted)">Chart:</span>
+      <button class="btn active" id="gTypeLine" onclick="setGraphType('line')">Line</button>
+      <button class="btn" id="gTypeBar" onclick="setGraphType('bar')">Bar</button>
+      <button class="btn" id="gTypeStacked" onclick="setGraphType('stacked')">Stacked Channel</button>
+      <button class="btn" id="gPlatformSplit" onclick="togglePlatformSplit()" style="margin-left:4px" title="Show iOS and Android as separate series">iOS / Android Split</button>
+    </div>
+    <div style="position:relative;height:300px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px">
+      <canvas id="afChart"></canvas>
+    </div>
   </div>
 </div>
 
@@ -617,6 +658,7 @@ initDates();
   });
 })();
 loadReport();
+initTheme();
 loadFacebook();
 loadCampaigns();
 
@@ -626,7 +668,16 @@ let currentPage = 'dashboard';
 let _networksFetch = null; // in-flight guard
 let _compareData   = null; // last-month comparison data cache
 let _compareActive = false;
+let _compareCampaignName = null; // same-period campaign comparison
+let _networkData   = null;        // full last networks response (all campaigns)
 let _currentCampaignId = null; // for asset history tab
+
+// ── Graph state ───────────────────────────────────────────
+let _afDailyData    = null;
+let _afChart        = null;
+let _graphType      = 'line';
+let _platformSplit  = false;
+let _selectedMetrics = ['installs'];
 
 async function loadCampaigns() {
   try {
@@ -647,6 +698,12 @@ function buildNetworksTable(data) {
   const prevFor = camp => {
     if (!_compareActive || !_compareData) return null;
     return _compareData.byId[camp.campaignId] || _compareData.byName[camp.campaignName] || null;
+  };
+  // compare: look up same-period data from a selected comparison campaign
+  const compareCampFor = camp => {
+    if (!_compareCampaignName || !_networkData) return null;
+    if (camp.campaignName === _compareCampaignName) return null;
+    return _networkData.campaigns.find(c => c.campaignName === _compareCampaignName) || null;
   };
   // delta chip: colored arrow + value
   const delta = (cur, prev, fmt2) => {
@@ -749,7 +806,28 @@ function buildNetworksTable(data) {
       }).join('');
     }
 
-    return totalRow + prevTotalRow + netRows + afRows;
+    // same-period campaign comparison row
+    let compareTotalRow = '';
+    const cc = compareCampFor(camp);
+    if (cc) {
+      const cp = cc.total;
+      const shortName = cc.campaignName.length > 22 ? cc.campaignName.substring(0,22)+'…' : cc.campaignName;
+      compareTotalRow = `<tr class="prev-row">
+        <td></td>
+        <td><em style="color:#60a5fa">vs ${shortName}</em></td>
+        <td>${fmt.money(cp.spend)} ${delta(camp.total.spend, cp.spend, v => fmt.money(v))}</td>
+        <td>${fmt.num(cp.clicks)}</td>
+        <td>${fmt.num(cp.impressions)}</td>
+        <td>${fmt.pct(cp.ctr)}</td>
+        <td>${fmt.money(cp.cpm)}</td>
+        <td>${fmt.money(cp.cpc)}</td>
+        <td>${fmt.num(cp.conversions)}</td>
+        <td>${cp.conversionsValue > 0 ? fmt.money(cp.conversionsValue) : '—'}</td>
+        ${hasAF ? '<td></td><td></td><td></td>' : ''}
+      </tr>`;
+    }
+
+    return totalRow + prevTotalRow + compareTotalRow + netRows + afRows;
   }).join('');
 
   const tag    = data._fromDB  ? ' <span style="font-size:10px;color:var(--muted)">💾 cached</span>' : '';
@@ -781,11 +859,16 @@ async function loadNetworks() {
     const fetchCompare = _compareActive
       ? fetch(`/api/networks-compare?from=${from}&to=${to}`, { signal: ctrl.signal }).then(r => r.json())
       : Promise.resolve(null);
-    const [data, cmp] = await Promise.all([fetchMain, fetchCompare]);
+    const fetchAFDaily = fetch(`/api/af-daily?from=${from}&to=${to}`, { signal: ctrl.signal }).then(r => r.json()).catch(() => null);
+    const [data, cmp, afDaily] = await Promise.all([fetchMain, fetchCompare, fetchAFDaily]);
     if (data.error) throw new Error(data.error);
     if (data._afDebug) console.log('[AF debug]', data._afDebug);
-    _compareData = cmp && !cmp.error ? cmp : null;
-    el.innerHTML = buildNetworksTable(data);
+    _compareData  = cmp && !cmp.error ? cmp : null;
+    _networkData  = data;
+    _afDailyData  = afDaily && !afDaily.error ? afDaily : null;
+    el.innerHTML  = buildNetworksTable(data);
+    updateCompareCampaignUI();
+    renderGraph();
   } catch(err) {
     if (err.name === 'AbortError') return;
     el.innerHTML = `<div class="error-msg">❌ ${err.message}</div>`;
@@ -800,6 +883,150 @@ function toggleCompare() {
   if (btn) btn.classList.toggle('active', _compareActive);
   loadNetworks();
 }
+
+// ── Theme toggle ──────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('theme');
+  const pref  = saved || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  document.documentElement.dataset.theme = pref === 'light' ? 'light' : '';
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = pref === 'light' ? '🌙' : '☀️';
+}
+function toggleTheme() {
+  const isLight = document.documentElement.dataset.theme === 'light';
+  const next    = isLight ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next === 'light' ? 'light' : '';
+  localStorage.setItem('theme', next);
+  document.getElementById('themeToggleBtn').textContent = next === 'light' ? '🌙' : '☀️';
+  if (_afChart) renderGraph(); // re-render chart with updated theme colors
+}
+
+// ── Campaign comparison ───────────────────────────────────
+function updateCompareCampaignUI() {
+  const panel = document.getElementById('compareCampaignPanel');
+  const sel   = document.getElementById('compareCampaignSelect');
+  if (!panel || !sel || !_networkData || !_networkData.campaigns) return;
+  const camps = _networkData.campaigns;
+  panel.style.display = camps.length >= 2 ? 'flex' : 'none';
+  sel.innerHTML = '<option value="">— none —</option>' +
+    camps.map(c => `<option value="${c.campaignName.replace(/"/g,'&quot;').replace(/</g,'&lt;')}">${c.campaignName.replace(/</g,'&lt;')}</option>`).join('');
+  if (_compareCampaignName) sel.value = _compareCampaignName;
+}
+function onCompareCampaignChange() {
+  _compareCampaignName = document.getElementById('compareCampaignSelect').value || null;
+  if (_networkData) document.getElementById('networks-main').innerHTML = buildNetworksTable(_networkData);
+}
+
+// ── AF Daily Graphs ───────────────────────────────────────
+const GRAPH_PALETTE = ['#7c6fff','#22c55e','#f59e0b','#ef4444','#38bdf8','#e879f9','#fb923c'];
+const AF_CHANNEL_LABELS = { ACI_Search: 'Search', ACI_Display: 'Display', ACI_YouTube: 'YouTube' };
+
+function deriveMetric(metric, { installs = 0, cost = 0, revenue = 0 }) {
+  if (metric === 'installs') return installs;
+  if (metric === 'cost')     return cost;
+  if (metric === 'revenue')  return revenue;
+  if (metric === 'cpa')      return installs > 0 ? cost / installs : 0;
+  if (metric === 'roas')     return cost > 0 ? revenue / cost : 0;
+  return 0;
+}
+const METRIC_LABELS = { installs:'Installs', cost:'Cost ($)', revenue:'Revenue ($)', cpa:'CPA ($)', roas:'ROAS' };
+
+function sumChannels(platformData, date) {
+  const day = (platformData || {})[date] || {};
+  return Object.values(day).reduce((acc, ch) => ({
+    installs: acc.installs + (ch.installs || 0),
+    cost:     acc.cost     + (ch.cost     || 0),
+    revenue:  acc.revenue  + (ch.revenue  || 0),
+  }), { installs: 0, cost: 0, revenue: 0 });
+}
+
+function renderGraph() {
+  const canvas = document.getElementById('afChart');
+  if (!canvas) return;
+  if (_afChart) { _afChart.destroy(); _afChart = null; }
+  if (!_afDailyData || !_afDailyData.dates || !_afDailyData.dates.length) {
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    const p = canvas.parentElement;
+    p.innerHTML = '<p style="text-align:center;color:var(--muted);padding:80px 0;font-size:13px">No AF daily data available for this range.</p><canvas id="afChart"></canvas>';
+    return;
+  }
+  const isLight   = document.documentElement.dataset.theme === 'light';
+  const gridColor = isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)';
+  const textColor = isLight ? '#1a1a2e' : '#e2e2f0';
+  const dates     = _afDailyData.dates;
+  const datasets  = [];
+
+  if (_graphType === 'stacked') {
+    const metric  = _selectedMetrics[0] || 'installs';
+    const channels = _afDailyData.channels || [];
+    channels.forEach((ch, ci) => {
+      const platforms = _platformSplit ? ['android','ios'] : ['combined'];
+      platforms.forEach((plat, pi) => {
+        const color = GRAPH_PALETTE[(ci * 2 + pi) % GRAPH_PALETTE.length];
+        const label = (AF_CHANNEL_LABELS[ch] || ch) + (_platformSplit ? ` (${plat})` : '');
+        const data  = dates.map(d => {
+          if (plat === 'combined') {
+            const a = ((_afDailyData.android || {})[d] || {})[ch] || {};
+            const i = ((_afDailyData.ios     || {})[d] || {})[ch] || {};
+            return deriveMetric(metric, { installs:(a.installs||0)+(i.installs||0), cost:(a.cost||0)+(i.cost||0), revenue:(a.revenue||0)+(i.revenue||0) });
+          }
+          const ch_data = ((_afDailyData[plat] || {})[d] || {})[ch] || {};
+          return deriveMetric(metric, ch_data);
+        });
+        datasets.push({ label, data, backgroundColor: color + 'cc', borderColor: color, borderWidth:1, stack:'channels' });
+      });
+    });
+    _afChart = new Chart(canvas, { type:'bar', data:{ labels:dates, datasets }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:textColor, font:{size:11} } } }, scales:{ x:{ stacked:true, grid:{color:gridColor}, ticks:{color:textColor,font:{size:10},maxRotation:45} }, y:{ stacked:true, grid:{color:gridColor}, ticks:{color:textColor,font:{size:11}}, title:{ display:true, text:METRIC_LABELS[metric]||metric, color:textColor, font:{size:11} } } } } });
+  } else {
+    let pIdx = 0;
+    _selectedMetrics.forEach(metric => {
+      const platforms = _platformSplit ? ['android','ios'] : ['combined'];
+      platforms.forEach(plat => {
+        const color = GRAPH_PALETTE[pIdx++ % GRAPH_PALETTE.length];
+        const label = METRIC_LABELS[metric] + (_platformSplit ? ` (${plat})` : '');
+        const data  = dates.map(d => {
+          if (plat === 'combined') {
+            const a = sumChannels(_afDailyData.android, d);
+            const i = sumChannels(_afDailyData.ios,     d);
+            return deriveMetric(metric, { installs:a.installs+i.installs, cost:a.cost+i.cost, revenue:a.revenue+i.revenue });
+          }
+          return deriveMetric(metric, sumChannels(_afDailyData[plat], d));
+        });
+        const ds = { label, data, borderColor:color, backgroundColor:color+'33', borderWidth:2, pointRadius:2, tension:0.3 };
+        if (_graphType === 'bar') { ds.type = 'bar'; ds.backgroundColor = color+'aa'; }
+        datasets.push(ds);
+      });
+    });
+    const chartType = _graphType === 'bar' ? 'bar' : 'line';
+    _afChart = new Chart(canvas, { type:chartType, data:{ labels:dates, datasets }, options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{ labels:{ color:textColor, font:{size:11} } } }, scales:{ x:{ grid:{color:gridColor}, ticks:{color:textColor,font:{size:10},maxRotation:45} }, y:{ grid:{color:gridColor}, ticks:{color:textColor,font:{size:11}} } } } });
+  }
+}
+
+function setGraphType(type) {
+  _graphType = type;
+  ['Line','Bar','Stacked'].forEach(t => {
+    const btn = document.getElementById('gType'+t);
+    if (btn) btn.classList.toggle('active', type === t.toLowerCase());
+  });
+  renderGraph();
+}
+
+function togglePlatformSplit() {
+  _platformSplit = !_platformSplit;
+  const btn = document.getElementById('gPlatformSplit');
+  if (btn) btn.classList.toggle('active', _platformSplit);
+  renderGraph();
+}
+
+// Metric checkbox enforcement (max 4)
+document.querySelectorAll('.graph-metric-label input').forEach(cb => {
+  cb.onchange = () => {
+    const checked = [...document.querySelectorAll('.graph-metric-label input:checked')];
+    if (checked.length > 4) { cb.checked = false; return; }
+    _selectedMetrics = checked.map(c => c.value);
+    renderGraph();
+  };
+});
 
 // ── Asset modal ───────────────────────────────────────────
 function perfBadge(label) {

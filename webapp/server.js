@@ -404,8 +404,10 @@ app.get('/api/debug', (req, res) => {
 
 app.get('/api/facebook',  require('./api/facebook'));
 app.get('/api/networks',  require('./api/networks'));
+app.get('/api/networks-compare', require('./api/networks-compare'));
 app.get('/api/campaigns', require('./api/campaigns'));
 app.get('/api/assets',    require('./api/assets'));
+app.get('/api/af-daily',  require('./api/af-daily'));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 if (require.main === module) {
