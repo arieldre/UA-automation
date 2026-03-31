@@ -141,7 +141,7 @@ const AF_CHANNEL_CONFIG = [
 async function fetchAFChannels(appId, from, to) {
   if (!APPSFLYER_TOKEN || !appId) return { _afError: 'missing config' };
   try {
-    const url = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/master_report/v4` +
+    const url = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_by_date_report/v5` +
       `?from=${from}&to=${to}` +
       `&groupings=af_channel&kpis=installs,cost,revenue&media_source=googleadwords_int`;
     const r = await fetch(url, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
