@@ -142,9 +142,9 @@ async function fetchAFChannels(appId, from, to) {
   if (!APPSFLYER_TOKEN || !appId) return { _afError: 'missing config' };
   try {
     const url = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/master_report/v4` +
-      `?api_token=${APPSFLYER_TOKEN}&from=${from}&to=${to}` +
+      `?from=${from}&to=${to}` +
       `&groupings=af_channel&kpis=installs,cost,revenue&media_source=googleadwords_int`;
-    const r = await fetch(url);
+    const r = await fetch(url, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
     const text = await r.text();
     if (!r.ok || text.trim().startsWith('{')) return { _afError: text.substring(0, 200) };
     return text;
