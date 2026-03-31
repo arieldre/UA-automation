@@ -312,10 +312,14 @@ const handler = async function handler(req, res) {
         ]);
         if (rawAndroid?._afError) afDebug.errors.push(`android: ${rawAndroid._afError}`);
         if (rawIos?._afError)     afDebug.errors.push(`ios: ${rawIos._afError}`);
+        afDebug.androidHeaders = typeof rawAndroid === 'string' ? rawAndroid.split('\n')[0] : null;
+        afDebug.iosHeaders     = typeof rawIos     === 'string' ? rawIos.split('\n')[0]     : null;
 
         if (!rawAndroid?._afError || !rawIos?._afError) {
           const byDateAndroid = parseAFChannelsByDate(rawAndroid);
           const byDateIos     = parseAFChannelsByDate(rawIos);
+          afDebug.byDateAndroidKeys = Object.keys(byDateAndroid);
+          afDebug.byDateIosKeys     = Object.keys(byDateIos);
           const missingSet    = new Set(missingDates);
           const allDates      = new Set([...Object.keys(byDateAndroid), ...Object.keys(byDateIos)]);
           for (const date of allDates) {
