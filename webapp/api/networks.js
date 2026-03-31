@@ -153,27 +153,50 @@ async function fetchAFChannels(appId, from, to) {
   }
 }
 
-function parseAFChannels(raw) {
+// Returns { 'YYYY-MM-DD': { channelKey: { installs, cost, revenue } } }
+function parseAFChannelsByDate(raw) {
   if (!raw || typeof raw !== 'string') return {};
   const lines = raw.trim().split('\n').filter(Boolean);
   if (lines.length < 2) return {};
-  const headers = lines[0].split(',').map(h => h.trim());
-  const chIdx  = headers.findIndex(h => h.toLowerCase().includes('channel'));
-  const inIdx  = headers.findIndex(h => h.toLowerCase() === 'installs');
-  const coIdx  = headers.findIndex(h => h.toLowerCase() === 'cost');
-  const reIdx  = headers.findIndex(h => h.toLowerCase() === 'revenue');
-  if (chIdx === -1) return {};
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const dtIdx = headers.findIndex(h => h === 'date');
+  const chIdx = headers.findIndex(h => h.includes('channel'));
+  const inIdx = headers.findIndex(h => h === 'installs');
+  const coIdx = headers.findIndex(h => h === 'cost');
+  const reIdx = headers.findIndex(h => h === 'revenue');
+  if (chIdx === -1 || dtIdx === -1) return {};
 
-  const result = {};
+  const byDate = {};
   for (let i = 1; i < lines.length; i++) {
     const cols    = lines[i].split(',');
     const channel = cols[chIdx]?.trim();
-    if (!channel) continue;
-    result[channel] = {
+    const date    = cols[dtIdx]?.trim();
+    if (!channel || !date) continue;
+    if (!byDate[date]) byDate[date] = {};
+    byDate[date][channel] = {
       installs: inIdx >= 0 ? (parseFloat(cols[inIdx]) || 0) : 0,
       cost:     coIdx >= 0 ? (parseFloat(cols[coIdx]) || 0) : 0,
       revenue:  reIdx >= 0 ? (parseFloat(cols[reIdx]) || 0) : 0,
     };
+  }
+  return byDate;
+}
+
+// Legacy single-date parse (kept for cron which fetches one day at a time)
+function parseAFChannels(raw) {
+  if (!raw || typeof raw !== 'string') return {};
+  const byDate = parseAFChannelsByDate(raw);
+  const dates  = Object.keys(byDate);
+  if (dates.length === 0) return {};
+  // Merge all dates into one (for single-date fetches there's only one)
+  const result = {};
+  for (const d of dates) {
+    for (const [ch, m] of Object.entries(byDate[d])) {
+      if (!result[ch]) result[ch] = { installs: 0, cost: 0, revenue: 0 };
+      result[ch].installs += m.installs;
+      result[ch].cost     += m.cost;
+      result[ch].revenue  += m.revenue;
+    }
   }
   return result;
 }
@@ -280,22 +303,29 @@ const handler = async function handler(req, res) {
       const missingDates = await getMissingAFChannelDates(androidId, from, to);
       afDebug.missingDates = missingDates;
       if (missingDates.length > 0) {
-        // Fetch missing dates in batches of 5
-        for (let i = 0; i < missingDates.length; i += 5) {
-          const batch = missingDates.slice(i, i + 5);
-          await Promise.all(batch.map(async date => {
-            const [rawAndroid, rawIos] = await Promise.all([
-              fetchAFChannels(androidId, date, date),
-              fetchAFChannels(iosId, date, date),
-            ]);
-            if (rawAndroid?._afError) afDebug.errors.push(`android ${date}: ${rawAndroid._afError}`);
-            if (rawIos?._afError)     afDebug.errors.push(`ios ${date}: ${rawIos._afError}`);
-            const merged = mergeAFChannelPlatforms(parseAFChannels(rawAndroid), parseAFChannels(rawIos));
+        // Fetch full missing range in 2 API calls (one per platform) instead of per-date
+        const fetchFrom = missingDates[0];
+        const fetchTo   = missingDates[missingDates.length - 1];
+        const [rawAndroid, rawIos] = await Promise.all([
+          fetchAFChannels(androidId, fetchFrom, fetchTo),
+          fetchAFChannels(iosId, fetchFrom, fetchTo),
+        ]);
+        if (rawAndroid?._afError) afDebug.errors.push(`android: ${rawAndroid._afError}`);
+        if (rawIos?._afError)     afDebug.errors.push(`ios: ${rawIos._afError}`);
+
+        if (!rawAndroid?._afError || !rawIos?._afError) {
+          const byDateAndroid = parseAFChannelsByDate(rawAndroid);
+          const byDateIos     = parseAFChannelsByDate(rawIos);
+          const missingSet    = new Set(missingDates);
+          const allDates      = new Set([...Object.keys(byDateAndroid), ...Object.keys(byDateIos)]);
+          for (const date of allDates) {
+            if (!missingSet.has(date)) continue;
+            const merged = mergeAFChannelPlatforms(byDateAndroid[date] || {}, byDateIos[date] || {});
             if (Object.keys(merged).length > 0) {
               await storeAFChannelForDate(androidId, date, merged);
               afDebug.stored++;
             }
-          }));
+          }
         }
       }
       afChannels = await getAFChannelsForRange(androidId, from, to);
