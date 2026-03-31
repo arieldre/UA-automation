@@ -493,6 +493,8 @@ function setPreset(days, btn) {
   document.getElementById('toDate').value   = localDateStr(to);
   document.getElementById('fromDate').value = localDateStr(from);
   loadReport();
+  loadFacebook();
+  if (currentPage === 'networks') loadNetworks();
 }
 
 function initDates() {
