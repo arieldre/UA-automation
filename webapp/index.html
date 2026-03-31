@@ -708,6 +708,7 @@ async function loadNetworks() {
     const res  = await fetch(`/api/networks?from=${from}&to=${to}`, { signal: ctrl.signal });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Unknown error');
+    if (data._afDebug) console.log('[AF debug]', data._afDebug);
     el.innerHTML = buildNetworksTable(data);
   } catch(err) {
     if (err.name === 'AbortError') return;

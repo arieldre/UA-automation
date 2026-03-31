@@ -275,8 +275,10 @@ const handler = async function handler(req, res) {
     const androidId = APPSFLYER_ANDROID_APP_ID;
     const iosId     = APPSFLYER_IOS_APP_ID;
 
+    const afDebug = { hasConfig: !!(androidId && iosId), missingDates: [], errors: [], stored: 0 };
     if (androidId && iosId) {
       const missingDates = await getMissingAFChannelDates(androidId, from, to);
+      afDebug.missingDates = missingDates;
       if (missingDates.length > 0) {
         // Fetch missing dates in batches of 5
         for (let i = 0; i < missingDates.length; i += 5) {
@@ -286,14 +288,18 @@ const handler = async function handler(req, res) {
               fetchAFChannels(androidId, date, date),
               fetchAFChannels(iosId, date, date),
             ]);
+            if (rawAndroid?._afError) afDebug.errors.push(`android ${date}: ${rawAndroid._afError}`);
+            if (rawIos?._afError)     afDebug.errors.push(`ios ${date}: ${rawIos._afError}`);
             const merged = mergeAFChannelPlatforms(parseAFChannels(rawAndroid), parseAFChannels(rawIos));
             if (Object.keys(merged).length > 0) {
               await storeAFChannelForDate(androidId, date, merged);
+              afDebug.stored++;
             }
           }));
         }
       }
       afChannels = await getAFChannelsForRange(androidId, from, to);
+      afDebug.rangeResult = afChannels ? Object.keys(afChannels) : null;
     }
 
     // Attach AF channel rows to each campaign
@@ -302,7 +308,7 @@ const handler = async function handler(req, res) {
       afChannelRows: buildAFChannelRows(camp, afChannels),
     }));
 
-    res.json({ from, to, campaigns: campaignsWithAF, _fromDB: missing.length === 0 });
+    res.json({ from, to, campaigns: campaignsWithAF, _fromDB: missing.length === 0, _afDebug: afDebug });
   } catch (err) {
     console.error('[networks]', err);
     res.status(500).json({ error: err.message });
