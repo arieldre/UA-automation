@@ -19,6 +19,8 @@ Thumbs.db
 # Build output
 dist/
 build/
+.next/
+screenshots/
 
 # Misc
 *.local
