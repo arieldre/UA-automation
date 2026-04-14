@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
   title: "UA Dashboard",
@@ -12,11 +13,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" data-theme="dark">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <body>
         <div className="flex min-h-screen">
-          {/* Sidebar placeholder — will be replaced in Phase 1 */}
-          <div className="flex-1">{children}</div>
+          <Sidebar />
+          <div className="flex-1 overflow-auto">{children}</div>
         </div>
       </body>
     </html>
