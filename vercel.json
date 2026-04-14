@@ -1,0 +1,9 @@
+{
+  "framework": "nextjs",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/webapp/api/:path*" }
+  ],
+  "crons": [
+    { "path": "/webapp/api/cron/refresh", "schedule": "0 6 * * *" }
+  ]
+}
