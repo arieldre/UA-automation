@@ -8,6 +8,17 @@ const nextConfig = {
     };
     return config;
   },
+
+  // Proxy /api/* to Express server in development
+  // In production (Vercel), vercel.json rewrites handle this
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:3000/api/:path*',
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

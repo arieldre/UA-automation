@@ -28,3 +28,5 @@ screenshots/
 
 # VS Code settings
 .vscode/
+.vercel
+.env*.local
