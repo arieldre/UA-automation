@@ -141,10 +141,10 @@ function buildMediaSourceNodes(
     const totalRevenue  = entries.reduce((sum, [, ms]) => sum + ms.revenue, 0);
     const metrics = deriveRatios({
       spend:       osAgg.ga.spend,
-      installs:    totalInstalls || osAgg.af.installs,
+      installs:    totalInstalls > 0 ? totalInstalls : osAgg.af.installs,
       impressions: osAgg.ga.impressions,
       clicks:      osAgg.ga.clicks,
-      revenue:     totalRevenue || osAgg.af.revenue,
+      revenue:     totalRevenue > 0 ? totalRevenue : osAgg.af.revenue,
     });
     const campaignNodes = buildCampaignNodes(data, parentId);
     return [
