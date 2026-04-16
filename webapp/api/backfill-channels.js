@@ -51,12 +51,15 @@ module.exports = async function handler(req, res) {
   const skipped = [];
   for (const date of allDates) {
     if (date < from || date > to) continue;
-    const merged = mergeAFChannelPlatforms(byDateAndroid[date] || {}, byDateIos[date] || {});
-    const channels = Object.keys(merged);
-    if (channels.length > 0) {
-      await storeAFChannelForDate(androidId, date, merged);
+    const androidChannels = byDateAndroid[date] || {};
+    const iosChannels     = byDateIos[date]     || {};
+    const hasData = Object.keys(androidChannels).length > 0 || Object.keys(iosChannels).length > 0;
+    if (hasData) {
+      // Store android and ios separately so the report can read per-platform splits
+      if (Object.keys(androidChannels).length > 0) await storeAFChannelForDate(androidId, date, androidChannels);
+      if (Object.keys(iosChannels).length > 0)     await storeAFChannelForDate(iosId,     date, iosChannels);
       stored++;
-      console.log(`  stored ${date}: [${channels.join(', ')}]`);
+      console.log(`  stored ${date}: android=[${Object.keys(androidChannels).join(', ')}] ios=[${Object.keys(iosChannels).join(', ')}]`);
     } else {
       skipped.push(date);
     }

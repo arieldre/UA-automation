@@ -77,10 +77,11 @@ async function refreshAFChannels(yesterday) {
 
   const byDateAndroid = rawAndroid?._afError ? {} : parseAFChannelsByDate(rawAndroid);
   const byDateIos     = rawIos?._afError     ? {} : parseAFChannelsByDate(rawIos);
-  const merged = mergeAFChannelPlatforms(byDateAndroid[yesterday] || {}, byDateIos[yesterday] || {});
-  if (Object.keys(merged).length > 0) {
-    await storeAFChannelForDate(androidId, yesterday, merged);
-  }
+  const androidChannels = byDateAndroid[yesterday] || {};
+  const iosChannels     = byDateIos[yesterday]     || {};
+  // Store android and ios separately so report can read per-platform splits
+  if (Object.keys(androidChannels).length > 0) await storeAFChannelForDate(androidId, yesterday, androidChannels);
+  if (Object.keys(iosChannels).length > 0)     await storeAFChannelForDate(iosId,     yesterday, iosChannels);
 }
 
 module.exports = async function handler(req, res) {

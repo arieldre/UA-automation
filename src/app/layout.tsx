@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "UA Dashboard",
-  description: "User Acquisition analytics dashboard",
+  title: "UA Automating",
+  description: "Multi-source user acquisition analytics dashboard",
 };
 
 export default function RootLayout({

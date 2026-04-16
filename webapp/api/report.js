@@ -4,7 +4,7 @@ const {
   APPSFLYER_TOKEN, APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID
 } = process.env;
 
-const { getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate } = require('../db');
+const { getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate, getAFChannelsForRange } = require('../db');
 
 async function getAccessToken() {
   const r = await fetch('https://oauth2.googleapis.com/token', {
@@ -327,7 +327,17 @@ module.exports = async function handler(req, res) {
       ios:     { ...computeMetrics(gaAgg, afIos.aggregate.byCampaign, afIos.aggregate.total), campaigns: buildCampaignList(gaAgg, afIos.aggregate.byCampaign) }
     };
 
-    res.json({ from, to, campaignNames, aggregate, days, _fromDB: missing.length === 0, _afDebug: afDebug });
+    // Read per-platform AF channel data (stored separately by android/ios app ID)
+    const [androidChannels, iosChannels] = await Promise.all([
+      getAFChannelsForRange(APPSFLYER_ANDROID_APP_ID, from, to),
+      getAFChannelsForRange(APPSFLYER_IOS_APP_ID, from, to),
+    ]);
+    const byMediaSource = (androidChannels || iosChannels) ? {
+      android: androidChannels || {},
+      ios:     iosChannels     || {},
+    } : undefined;
+
+    res.json({ from, to, campaignNames, aggregate, days, byMediaSource, _fromDB: missing.length === 0, _afDebug: afDebug });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
