@@ -203,7 +203,7 @@ async function fetchCohortRetention(appId, from, to) {
   try {
     const raw = await cohortRequest(appId, {
       cohort_type: 'user_acquisition',
-      aggregation_type: 'on_day',
+      aggregation_type: 'cumulative',
       min_cohort_size: 1,
       groupings: ['pid', 'date'],
       kpis: ['retention_rate'],
@@ -225,9 +225,9 @@ async function fetchCohortRetention(appId, from, to) {
 
       if (!result[date]) result[date] = {};
       result[date][pid] = {
-        ret_d1:  parseNum(colVal(row, 'retention_rate_day_1')),
-        ret_d7:  parseNum(colVal(row, 'retention_rate_day_7')),
-        ret_d30: parseNum(colVal(row, 'retention_rate_day_30')),
+        ret_d1:  parseNum(colVal(row, 'retention_rate_conversion_rate_day_1')),
+        ret_d7:  parseNum(colVal(row, 'retention_rate_conversion_rate_day_7')),
+        ret_d30: parseNum(colVal(row, 'retention_rate_conversion_rate_day_30')),
       };
     }
 
