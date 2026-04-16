@@ -146,20 +146,25 @@ const AF_CHANNEL_CONFIG = [
 async function fetchAFChannels(appId, from, to) {
   if (!APPSFLYER_TOKEN || !appId) return { _afError: 'missing config' };
   try {
-    // Primary: partners_by_date_report with NO media_source filter — returns ALL channels
+    // Primary: partners_by_date_report with NO media_source filter — returns ALL sources
     const url = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_by_date_report/v5?from=${from}&to=${to}&category=standard`;
     const r    = await fetch(url, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
     const text = await r.text();
+    let primaryError = null;
     if (r.ok && !text.trim().startsWith('{')) {
       const header = text.split('\n')[0].toLowerCase();
       if (header.includes('media source') || header.includes('channel')) return text;
+      primaryError = `partners_by_date_report: unexpected header: ${text.split('\n')[0].substring(0, 100)}`;
+    } else {
+      primaryError = `partners_by_date_report: status=${r.status} body=${text.substring(0, 200)}`;
     }
-    // Fallback: channel_by_date_report
+    console.warn('[fetchAFChannels] primary failed, falling back:', primaryError);
+    // Fallback: channel_by_date_report (Google UAC sub-channels only)
     const fallbackUrl = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/channel_by_date_report/v5?from=${from}&to=${to}&category=standard`;
     const r2    = await fetch(fallbackUrl, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
     const text2 = await r2.text();
     if (r2.ok && !text2.trim().startsWith('{')) return text2;
-    return { _afError: text.substring(0, 200) };
+    return { _afError: primaryError };
   } catch (e) {
     return { _afError: e.message };
   }

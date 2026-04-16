@@ -131,6 +131,36 @@ function buildMediaSourceNodes(
   // Build from byMediaSource data
   const entries = Object.entries(byMS) as [string, AFChannelMetrics][];
 
+  // ACI_* keys are Google UAC sub-channels (Search/Display/YouTube) from AF's channel_by_date_report.
+  // Collapse them into a single Google Ads row to avoid showing $0-spend sub-channel rows.
+  const ACI_PATTERN = /^ACI_/i;
+  const allGoogleUACChannels =
+    entries.length > 0 && entries.every(([k]) => ACI_PATTERN.test(k));
+  if (allGoogleUACChannels) {
+    const totalInstalls = entries.reduce((sum, [, ms]) => sum + ms.installs, 0);
+    const totalRevenue  = entries.reduce((sum, [, ms]) => sum + ms.revenue, 0);
+    const metrics = deriveRatios({
+      spend:       osAgg.ga.spend,
+      installs:    totalInstalls || osAgg.af.installs,
+      impressions: osAgg.ga.impressions,
+      clicks:      osAgg.ga.clicks,
+      revenue:     totalRevenue || osAgg.af.revenue,
+    });
+    const campaignNodes = buildCampaignNodes(data, parentId);
+    return [
+      {
+        id: `${parentId}/google-ads`,
+        level: "mediaSource" as const,
+        name: "Google Ads",
+        metrics,
+        mediaSource: "googleadwords_int",
+        children: campaignNodes.slice(0, TOP_N),
+        hasMore: campaignNodes.length > TOP_N,
+        totalChildren: campaignNodes.length,
+      },
+    ];
+  }
+
   const nodes: DashboardTreeNode[] = entries.map(([msKey, ms]) => {
     let spend: number;
     let clicks: number;
