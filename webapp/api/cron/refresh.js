@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { getCampaigns, storeCampaigns, getAssetState, storeAssetState, getMissingAFChannelDates, storeAFChannelForDate } = require('../../db');
 const { _test: assetsTest } = require('../assets');
-const { fetchAFByMediaSource } = require('../lib/af-mcp');
+const { fetchAFChannels, parseAFChannels, mergeAFChannelPlatforms } = require('../networks')._helpers;
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
         APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
@@ -68,8 +68,14 @@ async function refreshAFChannels(yesterday) {
   const missingAndroid = await getMissingAFChannelDates(androidId, yesterday, yesterday);
   if (missingAndroid.length === 0) return; // already stored
 
-  const byDate = await fetchAFByMediaSource(androidId, iosId, yesterday, yesterday);
-  const channels = byDate[yesterday] || {};
+  const [androidRaw, iosRaw] = await Promise.all([
+    fetchAFChannels(androidId, yesterday, yesterday),
+    fetchAFChannels(iosId,     yesterday, yesterday),
+  ]);
+  const channels = mergeAFChannelPlatforms(
+    parseAFChannels(androidRaw),
+    parseAFChannels(iosRaw)
+  );
   if (Object.keys(channels).length > 0) await storeAFChannelForDate(androidId, yesterday, channels);
 }
 
