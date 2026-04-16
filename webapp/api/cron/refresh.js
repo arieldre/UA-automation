@@ -1,7 +1,7 @@
 require('dotenv').config();
-const { getCampaigns, storeCampaigns, getAssetState, storeAssetState, getMissingAFChannelDates, storeAFChannelForDate } = require('../../db');
+const { getCampaigns, storeCampaigns, getAssetState, storeAssetState, storeAFChannelForDate } = require('../../db');
 const { _test: assetsTest } = require('../assets');
-const { fetchAFByMediaSource } = require('../../lib/af-mcp');
+const { fetchAFChannels, parseAFChannelsByDate } = require('../networks')._helpers;
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
         APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
@@ -67,25 +67,32 @@ async function refreshAFChannels(yesterday) {
   // Revision window: always re-fetch last 7 days (AF revises attribution up to 7 days)
   const revisionFrom = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
 
-  console.log(`[cron] refreshAFChannels: ${revisionFrom} → ${yesterday} via MCP`);
+  console.log(`[cron] refreshAFChannels: ${revisionFrom} → ${yesterday} via Pull API`);
 
-  const data = await fetchAFByMediaSource(androidId, iosId, revisionFrom, yesterday);
+  const [rawAndroid, rawIos] = await Promise.all([
+    fetchAFChannels(androidId, revisionFrom, yesterday),
+    fetchAFChannels(iosId,     revisionFrom, yesterday),
+  ]);
+
+  if (rawAndroid?._afError) console.warn('[cron] Android AF error:', rawAndroid._afError);
+  if (rawIos?._afError)     console.warn('[cron] iOS AF error:',     rawIos._afError);
+
+  const byDateAndroid = rawAndroid?._afError ? {} : parseAFChannelsByDate(rawAndroid);
+  const byDateIos     = rawIos?._afError     ? {} : parseAFChannelsByDate(rawIos);
 
   const allDates = [...new Set([
-    ...Object.keys(data.android),
-    ...Object.keys(data.ios),
+    ...Object.keys(byDateAndroid),
+    ...Object.keys(byDateIos),
   ])].sort().filter(d => d >= revisionFrom && d <= yesterday);
 
   for (const date of allDates) {
-    const androidChannels = data.android[date] || {};
-    const iosChannels     = data.ios[date]     || {};
-    const androidGeo      = data.geo.android[date] || [];
-    const iosGeo          = data.geo.ios[date]     || [];
+    const androidChannels = byDateAndroid[date] || {};
+    const iosChannels     = byDateIos[date]     || {};
 
     if (Object.keys(androidChannels).length > 0)
-      await storeAFChannelForDate(androidId, date, androidChannels, androidGeo.length ? androidGeo : null);
+      await storeAFChannelForDate(androidId, date, androidChannels, null);
     if (Object.keys(iosChannels).length > 0)
-      await storeAFChannelForDate(iosId, date, iosChannels, iosGeo.length ? iosGeo : null);
+      await storeAFChannelForDate(iosId, date, iosChannels, null);
   }
 }
 
