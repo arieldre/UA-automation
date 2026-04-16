@@ -5,6 +5,7 @@ const {
 } = process.env;
 
 const { getDatesInRange, getMissingDates, storeGAByDate, storeAFByDate, getGAByDate, getAFByDate } = require('../webapp/db');
+const { loadByMediaSource } = require('./lib/mediaSources');
 
 async function getAccessToken() {
   const r = await fetch('https://oauth2.googleapis.com/token', {
@@ -327,7 +328,19 @@ module.exports = async function handler(req, res) {
       ios:     { ...computeMetrics(gaAgg, afIos.aggregate.byCampaign, afIos.aggregate.total), campaigns: buildCampaignList(gaAgg, afIos.aggregate.byCampaign) }
     };
 
-    res.json({ from, to, campaignNames, aggregate, days, _fromDB: missing.length === 0, _afDebug: afDebug });
+    let byMediaSource = null;
+    let gaps = [];
+    if (APPSFLYER_ANDROID_APP_ID && APPSFLYER_IOS_APP_ID) {
+      try {
+        const msResult = await loadByMediaSource(from, to, APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID);
+        byMediaSource = { android: msResult.android, ios: msResult.ios };
+        gaps = msResult.gaps;
+      } catch (msErr) {
+        console.error('[report] loadByMediaSource failed:', msErr.message);
+      }
+    }
+
+    res.json({ from, to, campaignNames, aggregate, days, _fromDB: missing.length === 0, _afDebug: afDebug, byMediaSource, gaps });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
