@@ -239,12 +239,15 @@ async function fetchAFByMediaSource(androidId, iosId, from, to) {
 
   try {
     // Two parallel sessions — one per platform
+    let androidError = null, iosError = null;
     const [androidResult, iosResult] = await Promise.all([
       fetchOneApp(token, androidId, from, to).catch(e => {
+        androidError = e.message;
         console.warn('[af-mcp] android error:', e.message);
         return { channels: {}, geo: {} };
       }),
       fetchOneApp(token, iosId, from, to).catch(e => {
+        iosError = e.message;
         console.warn('[af-mcp] ios error:', e.message);
         return { channels: {}, geo: {} };
       }),
@@ -257,6 +260,7 @@ async function fetchAFByMediaSource(androidId, iosId, from, to) {
         android: androidResult.geo,
         ios:     iosResult.geo,
       },
+      _errors: { android: androidError, ios: iosError },
     };
   } catch (e) {
     console.warn('[af-mcp] fetchAFByMediaSource error:', e.message);
