@@ -31,25 +31,6 @@ function BarChartIcon({ size = 18 }: { size?: number }) {
   );
 }
 
-function GridIcon({ size = 18 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
-    </svg>
-  );
-}
 
 function GlobeIcon({ size = 18 }: { size?: number }) {
   return (
@@ -170,9 +151,8 @@ function MoonIcon({ size = 16 }: { size?: number }) {
 // ── Navigation items ──
 const NAV_ITEMS: NavItem[] = [
   { label: "Campaigns", href: "/dashboard", icon: <BarChartIcon /> },
-  { label: "Campaigns v2", href: "/dashboard/v2", icon: <GridIcon /> },
-  { label: "Networks", href: "/networks", icon: <GlobeIcon /> },
-  { label: "Notes", href: "/notes", icon: <DocumentIcon /> },
+  { label: "Networks", href: "/dashboard/networks", icon: <GlobeIcon /> },
+  { label: "Notes", href: "/dashboard/notes", icon: <DocumentIcon /> },
   { label: "Data Integrity", href: "/dashboard/integrity", icon: <ShieldIcon /> },
 ];
 
