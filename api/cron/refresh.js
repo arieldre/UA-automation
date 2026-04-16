@@ -62,7 +62,7 @@ async function refreshCampaignAssets(campaign, today) {
 }
 
 // AF data can be revised up to 7 days after attribution — always re-fetch the revision window.
-const REVISION_DAYS = 30;
+const REVISION_DAYS = 7;
 
 async function refreshAFChannels(yesterday) {
   const androidId = APPSFLYER_ANDROID_APP_ID;

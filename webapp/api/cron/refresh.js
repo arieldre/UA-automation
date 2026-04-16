@@ -61,31 +61,25 @@ async function refreshCampaignAssets(campaign, today) {
   await storeAssetState(campaign.id, stateDoc);
 }
 
-const REVISION_DAYS = 30;
-
 async function refreshAFChannels(yesterday) {
   const androidId = APPSFLYER_ANDROID_APP_ID;
   const iosId     = APPSFLYER_IOS_APP_ID;
   if (!androidId || !iosId) return;
 
-  // Always refresh the last REVISION_DAYS (AF revises recent conversion data)
-  const revisionFrom = new Date(Date.now() - REVISION_DAYS * 86400000).toISOString().split('T')[0];
+  // Only fetch yesterday's new data — backfill script handles historical fills
+  const missing = await getMissingAFChannelDates(androidId, yesterday, yesterday);
+  if (missing.length === 0) return; // already stored
 
   const [rawAndroid, rawIos] = await Promise.all([
-    fetchAFChannels(androidId, revisionFrom, yesterday),
-    fetchAFChannels(iosId, revisionFrom, yesterday),
+    fetchAFChannels(androidId, yesterday, yesterday),
+    fetchAFChannels(iosId, yesterday, yesterday),
   ]);
 
   const byDateAndroid = rawAndroid?._afError ? {} : parseAFChannelsByDate(rawAndroid);
   const byDateIos     = rawIos?._afError     ? {} : parseAFChannelsByDate(rawIos);
-  const allDates = [...new Set([...Object.keys(byDateAndroid), ...Object.keys(byDateIos)])].sort();
-
-  for (const date of allDates) {
-    if (date < revisionFrom || date > yesterday) continue;
-    const merged = mergeAFChannelPlatforms(byDateAndroid[date] || {}, byDateIos[date] || {});
-    if (Object.keys(merged).length > 0) {
-      await storeAFChannelForDate(androidId, date, merged);
-    }
+  const merged = mergeAFChannelPlatforms(byDateAndroid[yesterday] || {}, byDateIos[yesterday] || {});
+  if (Object.keys(merged).length > 0) {
+    await storeAFChannelForDate(androidId, yesterday, merged);
   }
 }
 
