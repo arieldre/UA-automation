@@ -87,5 +87,6 @@ module.exports = async function handler(req, res) {
     cohortDates: stored,
     gaps,
     sources: [...new Set(Object.values(data.android).flatMap(d => Object.keys(d)))],
+    _debug: { mcpTokenSet: !!process.env.APPSFLYER_MCP, mcpTokenLength: process.env.APPSFLYER_MCP?.length || 0 },
   });
 };
