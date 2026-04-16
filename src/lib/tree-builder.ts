@@ -1,6 +1,6 @@
-import type { ReportResponse, ReportMetrics, AFMetrics } from "@/lib/types";
+import type { ReportResponse, ReportMetrics, AFMetrics, AFChannelMetrics } from "@/lib/types";
 
-// ── Tree node for the expandable table ──
+// ── Exported types ──
 
 export interface TreeMetrics {
   spend: number;
@@ -17,39 +17,23 @@ export interface TreeMetrics {
   revenue: number;
 }
 
-export interface TableTreeNode {
+export type DashboardLevel = "app" | "os" | "mediaSource" | "campaign";
+
+export interface DashboardTreeNode {
   id: string;
-  level: "platform" | "campaign" | "date";
+  level: DashboardLevel;
   name: string;
-  icon?: string;
   metrics: TreeMetrics;
-  children: TableTreeNode[];
+  children: DashboardTreeNode[];
+  hasMore?: boolean;
+  totalChildren?: number;
+  mediaSource?: string; // raw AF key, used for Google detection
 }
+
+/** @deprecated use DashboardTreeNode */
+export type TableTreeNode = DashboardTreeNode & { level: DashboardLevel };
 
 // ── Helpers ──
-
-function computeMetrics(ga: ReportMetrics, af: AFMetrics): TreeMetrics {
-  const spend = ga.spend;
-  const installs = af.installs;
-  const impressions = ga.impressions;
-  const clicks = ga.clicks;
-  const revenue = af.revenue;
-
-  return {
-    spend,
-    installs,
-    ecpi: installs > 0 ? spend / installs : 0,
-    ipm: impressions > 0 ? (installs / impressions) * 1000 : 0,
-    cpm: ga.cpm,
-    ctr: ga.ctr,
-    cvr: ga.cvr,
-    roas: spend > 0 ? revenue / spend : 0,
-    arpu: installs > 0 ? revenue / installs : 0,
-    clicks,
-    impressions,
-    revenue,
-  };
-}
 
 function emptyMetrics(): TreeMetrics {
   return {
@@ -66,18 +50,6 @@ function emptyMetrics(): TreeMetrics {
     impressions: 0,
     revenue: 0,
   };
-}
-
-function addRaw(
-  acc: { spend: number; installs: number; impressions: number; clicks: number; revenue: number },
-  ga: ReportMetrics,
-  af: AFMetrics
-) {
-  acc.spend += ga.spend;
-  acc.installs += af.installs;
-  acc.impressions += ga.impressions;
-  acc.clicks += ga.clicks;
-  acc.revenue += af.revenue;
 }
 
 function deriveRatios(raw: {
@@ -104,96 +76,239 @@ function deriveRatios(raw: {
   };
 }
 
-// ── Campaign aggregation per platform ──
+function computeMetricsFromGAAF(ga: ReportMetrics, af: AFMetrics): TreeMetrics {
+  return deriveRatios({
+    spend: ga.spend,
+    installs: af.installs,
+    impressions: ga.impressions,
+    clicks: ga.clicks,
+    revenue: af.revenue,
+  });
+}
 
-type PlatformKey = "all" | "android" | "ios";
+const TOP_N = 10;
+
+function isGoogleSource(key: string): boolean {
+  return /googleads|googleadwords/i.test(key);
+}
+
+// ── Media Source nodes (Level 2) ──
+
+function buildMediaSourceNodes(
+  data: ReportResponse,
+  osKey: "android" | "ios",
+  osAgg: { ga: ReportMetrics; af: AFMetrics },
+  parentId: string
+): DashboardTreeNode[] {
+  const byMS = data.byMediaSource?.[osKey];
+
+  if (!byMS || Object.keys(byMS).length === 0) {
+    // Fallback: single Google Ads row using GA aggregate
+    const gaMet: ReportMetrics = osAgg.ga;
+    const afMet: AFMetrics = osAgg.af;
+    const metrics = deriveRatios({
+      spend: gaMet.spend,
+      installs: afMet.installs,
+      impressions: gaMet.impressions,
+      clicks: gaMet.clicks,
+      revenue: afMet.revenue,
+    });
+    const campaignNodes = buildCampaignNodes(data, parentId);
+    return [
+      {
+        id: `${parentId}/google-ads`,
+        level: "mediaSource",
+        name: "Google Ads",
+        metrics,
+        mediaSource: "googleadwords_int",
+        children: campaignNodes.slice(0, TOP_N),
+        hasMore: campaignNodes.length > TOP_N,
+        totalChildren: campaignNodes.length,
+      },
+    ];
+  }
+
+  // Build from byMediaSource data
+  const entries = Object.entries(byMS) as [string, AFChannelMetrics][];
+
+  const nodes: DashboardTreeNode[] = entries.map(([msKey, ms]) => {
+    let spend: number;
+    let clicks: number;
+    let impressions: number;
+
+    if (isGoogleSource(msKey)) {
+      // Use GA aggregate values for Google rows
+      spend = osAgg.ga.spend;
+      clicks = osAgg.ga.clicks;
+      impressions = osAgg.ga.impressions;
+    } else {
+      spend = ms.cost;
+      clicks = ms.clicks;
+      impressions = ms.impressions;
+    }
+
+    const installs = ms.installs;
+    const revenue = ms.revenue;
+
+    const metrics = deriveRatios({ spend, installs, impressions, clicks, revenue });
+    const campaignNodes = buildCampaignNodes(data, `${parentId}/${msKey}`);
+    const displayName = friendlyMediaSourceName(msKey);
+
+    return {
+      id: `${parentId}/${msKey}`,
+      level: "mediaSource" as const,
+      name: displayName,
+      metrics,
+      mediaSource: msKey,
+      children: campaignNodes.slice(0, TOP_N),
+      hasMore: campaignNodes.length > TOP_N,
+      totalChildren: campaignNodes.length,
+    };
+  });
+
+  // Sort by spend desc
+  nodes.sort((a, b) => b.metrics.spend - a.metrics.spend);
+
+  const total = nodes.length;
+  if (total > TOP_N) {
+    return nodes.slice(0, TOP_N).map((n, i) => ({
+      ...n,
+      hasMore: i === TOP_N - 1 ? true : n.hasMore,
+      totalChildren: i === TOP_N - 1 ? total : n.totalChildren,
+    }));
+  }
+  return nodes;
+}
+
+// Friendly display names for known AF media source keys
+function friendlyMediaSourceName(key: string): string {
+  const lower = key.toLowerCase();
+  if (/googleadwords|googleads/.test(lower)) return "Google Ads";
+  if (lower.includes("facebook") || lower.includes("meta")) return "Meta";
+  if (lower.includes("tiktok")) return "TikTok";
+  if (lower.includes("applovin")) return "AppLovin";
+  if (lower.includes("unity")) return "Unity Ads";
+  if (lower.includes("snapchat")) return "Snapchat";
+  if (lower.includes("apple")) return "Apple Search Ads";
+  if (lower.includes("ironsource")) return "IronSource";
+  // Fallback: title-case the key, strip suffixes like _int
+  return key
+    .replace(/_int$/i, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// ── Campaign nodes (Level 3) ──
 
 function buildCampaignNodes(
   data: ReportResponse,
-  platformKey: PlatformKey,
-  parentId: string
-): TableTreeNode[] {
-  // Accumulate per-campaign totals across days, then build date children
+  parentId: string,
+  opts?: { showPaused?: boolean }
+): DashboardTreeNode[] {
+  const showPaused = opts?.showPaused ?? false;
+
   const campaignMap = new Map<
     string,
-    {
-      raw: { spend: number; installs: number; impressions: number; clicks: number; revenue: number };
-      days: { date: string; ga: ReportMetrics; af: AFMetrics }[];
-    }
+    { spend: number; installs: number; impressions: number; clicks: number; revenue: number }
   >();
 
   for (const day of data.days) {
     for (const [campaignName, campaignData] of Object.entries(day.campaigns)) {
-      let entry = campaignMap.get(campaignName);
-      if (!entry) {
-        entry = {
-          raw: { spend: 0, installs: 0, impressions: 0, clicks: 0, revenue: 0 },
-          days: [],
-        };
-        campaignMap.set(campaignName, entry);
-      }
-
-      // For "all" platform, use campaign data directly.
-      // For android/ios, we only have campaign-level data (not split by platform),
-      // so for sub-platform nodes we still use the campaign data.
-      // The platform split is reflected at the aggregate level (Level 1).
-      const ga = campaignData.ga;
-      const af = campaignData.af;
-
-      addRaw(entry.raw, ga, af);
-      entry.days.push({ date: day.date, ga, af });
+      const existing = campaignMap.get(campaignName) ?? {
+        spend: 0,
+        installs: 0,
+        impressions: 0,
+        clicks: 0,
+        revenue: 0,
+      };
+      existing.spend += campaignData.ga.spend;
+      existing.installs += campaignData.af.installs;
+      existing.impressions += campaignData.ga.impressions;
+      existing.clicks += campaignData.ga.clicks;
+      existing.revenue += campaignData.af.revenue;
+      campaignMap.set(campaignName, existing);
     }
   }
 
-  // Sort campaigns by spend descending
-  const sorted = [...campaignMap.entries()].sort(
-    (a, b) => b[1].raw.spend - a[1].raw.spend
-  );
+  let entries = [...campaignMap.entries()];
 
-  return sorted.map(([name, entry]) => {
-    const campaignId = `${parentId}/${name}`;
-    const dateChildren: TableTreeNode[] = entry.days
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map((d) => ({
-        id: `${campaignId}/${d.date}`,
-        level: "date" as const,
-        name: d.date,
-        metrics: computeMetrics(d.ga, d.af),
-        children: [],
-      }));
+  // Filter paused (zero spend) unless showPaused
+  if (!showPaused) {
+    entries = entries.filter(([, raw]) => raw.spend > 0);
+  }
 
-    return {
-      id: campaignId,
-      level: "campaign" as const,
-      name,
-      metrics: deriveRatios(entry.raw),
-      children: dateChildren,
-    };
-  });
+  // Sort by spend desc
+  entries.sort((a, b) => b[1].spend - a[1].spend);
+
+  const total = entries.length;
+  const visible = entries.slice(0, TOP_N);
+
+  return visible.map(([name, raw], i) => ({
+    id: `${parentId}/${name}`,
+    level: "campaign" as const,
+    name,
+    metrics: deriveRatios(raw),
+    children: [],
+    hasMore: i === visible.length - 1 && total > TOP_N ? true : undefined,
+    totalChildren: i === visible.length - 1 && total > TOP_N ? total : undefined,
+  }));
 }
 
 // ── Main builder ──
 
-export function buildTree(data: ReportResponse): TableTreeNode[] {
-  if (!data || !data.aggregate) return [];
+export interface BuildTreeOpts {
+  showPaused?: boolean;
+}
 
-  const platforms: { key: PlatformKey; name: string; icon: string }[] = [
-    { key: "all", name: "All Platforms", icon: "\uD83C\uDF10" },
-    { key: "android", name: "Android", icon: "\uD83E\uDD16" },
-    { key: "ios", name: "iOS", icon: "\uD83C\uDF4E" },
-  ];
+export function buildTree(data: ReportResponse, opts?: BuildTreeOpts): DashboardTreeNode[] {
+  if (!data?.aggregate) return [];
 
-  return platforms.map(({ key, name, icon }) => {
-    const agg = data.aggregate[key];
-    const platformId = key;
+  const showPaused = opts?.showPaused ?? false;
+
+  // Level 1 — OS nodes
+  const osNodes: DashboardTreeNode[] = (["android", "ios"] as const).map((osKey) => {
+    const agg = data.aggregate[osKey];
+    const rawMetrics = deriveRatios({
+      spend: agg.ga.spend,
+      installs: agg.af.installs,
+      impressions: agg.ga.impressions,
+      clicks: agg.ga.clicks,
+      revenue: agg.af.revenue,
+    });
+
+    const mediaSourceChildren = buildMediaSourceNodes(data, osKey, agg, osKey);
 
     return {
-      id: platformId,
-      level: "platform" as const,
-      name,
-      icon,
-      metrics: computeMetrics(agg.ga, agg.af),
-      children: buildCampaignNodes(data, key, platformId),
+      id: osKey,
+      level: "os" as const,
+      name: osKey === "android" ? "Android" : "iOS",
+      metrics: rawMetrics,
+      children: mediaSourceChildren,
     };
   });
+
+  // Sort android first (by id lexicographically android < ios, already correct)
+
+  // Level 0 — App row (Urban Heat)
+  const allAgg = data.aggregate.all;
+  const appMetrics = deriveRatios({
+    spend: allAgg.ga.spend,
+    installs: allAgg.af.installs,
+    impressions: allAgg.ga.impressions,
+    clicks: allAgg.ga.clicks,
+    revenue: allAgg.af.revenue,
+  });
+
+  const appNode: DashboardTreeNode = {
+    id: "urban-heat",
+    level: "app",
+    name: "Urban Heat",
+    metrics: appMetrics,
+    children: osNodes,
+  };
+
+  return [appNode];
 }
+
+// Keep old export alias working
+export { buildTree as default };
