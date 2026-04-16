@@ -67,8 +67,12 @@ async function refreshAFChannels(yesterday) {
   if (!androidId || !iosId) return;
 
   // Only fetch yesterday's new data — backfill script handles historical fills
-  const missing = await getMissingAFChannelDates(androidId, yesterday, yesterday);
-  if (missing.length === 0) return; // already stored
+  // Check both platforms independently so a failed iOS fetch doesn't block android (and vice versa)
+  const [missingAndroid, missingIos] = await Promise.all([
+    getMissingAFChannelDates(androidId, yesterday, yesterday),
+    getMissingAFChannelDates(iosId,     yesterday, yesterday),
+  ]);
+  if (missingAndroid.length === 0 && missingIos.length === 0) return; // both already stored
 
   const [rawAndroid, rawIos] = await Promise.all([
     fetchAFChannels(androidId, yesterday, yesterday),

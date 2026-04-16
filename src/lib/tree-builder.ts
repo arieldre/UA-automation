@@ -143,8 +143,8 @@ function buildMediaSourceNodes(
       impressions = osAgg.ga.impressions;
     } else {
       spend = ms.cost;
-      clicks = ms.clicks;
-      impressions = ms.impressions;
+      clicks = ms.clicks ?? 0;
+      impressions = ms.impressions ?? 0;
     }
 
     const installs = ms.installs;

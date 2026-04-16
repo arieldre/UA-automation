@@ -201,7 +201,7 @@ async function storeAFChannelForDate(appId, date, channels) {
   const db = await connect();
   await db.collection('af_channels_daily').updateOne(
     { _id: `${appId}_${date}` },
-    { $setOnInsert: { appId, date, channels, fetched_at: new Date().toISOString() } },
+    { $set: { appId, date, channels, fetched_at: new Date().toISOString() } },
     { upsert: true }
   );
 }

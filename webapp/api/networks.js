@@ -363,15 +363,21 @@ const handler = async function handler(req, res) {
           const allDates      = new Set([...Object.keys(byDateAndroid), ...Object.keys(byDateIos)]);
           for (const date of allDates) {
             if (!missingSet.has(date)) continue;
-            const merged = mergeAFChannelPlatforms(byDateAndroid[date] || {}, byDateIos[date] || {});
-            if (Object.keys(merged).length > 0) {
-              await storeAFChannelForDate(androidId, date, merged);
-              afDebug.stored++;
-            }
+            // Store android and ios separately so report.js can read per-platform splits
+            const androidCh = byDateAndroid[date] || {};
+            const iosCh     = byDateIos[date]     || {};
+            if (Object.keys(androidCh).length > 0) await storeAFChannelForDate(androidId, date, androidCh);
+            if (Object.keys(iosCh).length > 0)     await storeAFChannelForDate(iosId,     date, iosCh);
+            if (Object.keys(androidCh).length > 0 || Object.keys(iosCh).length > 0) afDebug.stored++;
           }
         }
       }
-      afChannels = await getAFChannelsForRange(androidId, from, to);
+      const [afAndroid, afIos] = await Promise.all([
+        getAFChannelsForRange(androidId, from, to),
+        getAFChannelsForRange(iosId, from, to),
+      ]);
+      afChannels = mergeAFChannelPlatforms(afAndroid || {}, afIos || {});
+      if (Object.keys(afChannels).length === 0) afChannels = null;
       afDebug.rangeResult = afChannels ? Object.keys(afChannels) : null;
     }
 
