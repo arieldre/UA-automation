@@ -64,5 +64,11 @@ module.exports = async function handler(req, res) {
     channels: Object.keys(
       Object.values(byDate)[0] || {}
     ),
+    _debug: {
+      hasAndroidId: !!process.env.APPSFLYER_ANDROID_APP_ID,
+      hasIosId: !!process.env.APPSFLYER_IOS_APP_ID,
+      hasMcpToken: !!process.env.APPSFLYER_MCP,
+      mcpTokenLen: (process.env.APPSFLYER_MCP || '').length,
+    },
   });
 };
