@@ -52,7 +52,7 @@ async function fetchGoogleAdsPurchases(from, to, token) {
 }
 
 async function fetchAppsFlyer(appId, from, to) {
-  const r = await fetch(`https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_by_date_report/v5?from=${from}&to=${to}&media_source=googleadwords_int&category=standard`, {
+  const r = await fetch(`https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_by_date_report/v5?from=${from}&to=${to}&category=standard`, {
     headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` }
   });
   const text = await r.text();
