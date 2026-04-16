@@ -173,7 +173,7 @@ async function fetchAFByMediaSource(androidId, iosId, from, to) {
         { metric_name: 'Impressions' },
         { metric_name: 'Revenue', period: '0' },
       ],
-      row_count: 1000,
+      row_count: 300,
     });
 
     const rows = parseMcpCsv(rawText || '');
@@ -186,7 +186,7 @@ async function fetchAFByMediaSource(androidId, iosId, from, to) {
 
       const installs    = Math.round(parseNum(colVal(row, 'Installs appsflyer', 'Installs')));
       const cost        = parseNum(colVal(row, 'Total Cost', 'Cost'));
-      const revenue     = parseNum(colVal(row, 'Total Revenue', 'Revenue'));
+      const revenue     = parseNum(colVal(row, 'Revenue days 0 cumulative appsflyer', 'Total Revenue', 'Revenue'));
       const clicks      = Math.round(parseNum(colVal(row, 'Clicks')));
       const impressions = Math.round(parseNum(colVal(row, 'Impressions')));
 
