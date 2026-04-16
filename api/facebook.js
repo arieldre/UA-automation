@@ -37,7 +37,7 @@ async function fetchInsights(rawId, from, to, token) {
   while (url) {
     const r    = await fetch(url);
     const json = await r.json();
-    if (json.error) return { error: json.error.message, code: json.error.code };
+    if (json.error) return { error: json.error.message?.replace(/EAA[A-Za-z0-9]+/g, '[REDACTED]') ?? 'Facebook API error', code: json.error.code };
     rows.push(...(json.data || []));
     url = json.paging?.next || null;
   }
