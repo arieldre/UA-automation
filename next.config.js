@@ -9,15 +9,13 @@ const nextConfig = {
     return config;
   },
 
-  // Proxy /api/* to working backend (ua-automation-lac in prod, local Express in dev)
+  // Proxy /api/* to local Express server in dev only (vercel.json handles production routing)
   async rewrites() {
-    const apiBase = process.env.NODE_ENV === 'production'
-      ? 'https://ua-automation-lac.vercel.app'
-      : 'http://localhost:3000';
+    if (process.env.NODE_ENV === 'production') return [];
     return [
       {
         source: '/api/:path*',
-        destination: `${apiBase}/api/:path*`,
+        destination: 'http://localhost:3000/api/:path*',
       },
     ];
   },
