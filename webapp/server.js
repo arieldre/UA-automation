@@ -409,6 +409,7 @@ app.get('/api/campaigns', require('./api/campaigns'));
 app.get('/api/assets',    require('./api/assets'));
 app.get('/api/af-daily',  require('./api/af-daily'));
 app.get('/api/backfill-channels', require('./api/backfill-channels'));
+app.get('/api/af-debug',          require('./api/af-debug'));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 if (require.main === module) {
