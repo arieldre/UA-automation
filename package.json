@@ -10,7 +10,9 @@
     "test:legacy": "cd webapp && npm test"
   },
   "dependencies": {
+    "@vercel/functions": "^3.4.3",
     "dotenv": "^17.4.2",
+    "mongodb": "^7.1.1",
     "next": "^15.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
