@@ -9,9 +9,9 @@ const nextConfig = {
     return config;
   },
 
-  // Proxy /api/* to Express server in development
-  // In production (Vercel), vercel.json rewrites handle this
+  // Proxy /api/* to local Express server in dev only (Vercel serves api/ directly in production)
   async rewrites() {
+    if (process.env.NODE_ENV === 'production') return [];
     return [
       {
         source: '/api/:path*',
