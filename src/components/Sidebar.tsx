@@ -151,8 +151,8 @@ function MoonIcon({ size = 16 }: { size?: number }) {
 // ── Navigation items ──
 const NAV_ITEMS: NavItem[] = [
   { label: "Campaigns", href: "/dashboard", icon: <BarChartIcon /> },
-  { label: "Networks", href: "/dashboard/networks", icon: <GlobeIcon /> },
-  { label: "Notes", href: "/dashboard/notes", icon: <DocumentIcon /> },
+  { label: "Networks", href: "/networks", icon: <GlobeIcon /> },
+  { label: "Notes", href: "/notes", icon: <DocumentIcon /> },
   { label: "Data Integrity", href: "/dashboard/integrity", icon: <ShieldIcon /> },
 ];
 
