@@ -197,11 +197,13 @@ async function getMissingAFChannelDates(appId, from, to) {
   return dates.filter(d => !have.has(`${appId}_${d}`));
 }
 
-async function storeAFChannelForDate(appId, date, channels) {
+async function storeAFChannelForDate(appId, date, channels, geo) {
   const db = await connect();
+  const update = { appId, date, channels, fetched_at: new Date().toISOString() };
+  if (geo && geo.length > 0) update.geo = geo;
   await db.collection('af_channels_daily').updateOne(
     { _id: `${appId}_${date}` },
-    { $set: { appId, date, channels, fetched_at: new Date().toISOString() } },
+    { $set: update },
     { upsert: true }
   );
 }
@@ -218,6 +220,7 @@ async function getAFDailyBreakdown(androidId, iosId, from, to) {
   for (const doc of docs) {
     const platform = doc.appId === androidId ? 'android' : 'ios';
     result[platform][doc.date] = doc.channels || {};
+    if (doc.geo) result[platform][doc.date + '__geo'] = doc.geo;
   }
   return result;
 }
@@ -231,10 +234,18 @@ async function getAFChannelsForRange(appId, from, to) {
   const merged = {};
   for (const doc of docs) {
     for (const [ch, m] of Object.entries(doc.channels || {})) {
-      if (!merged[ch]) merged[ch] = { installs: 0, cost: 0, revenue: 0 };
-      merged[ch].installs += m.installs || 0;
-      merged[ch].cost     += m.cost     || 0;
-      merged[ch].revenue  += m.revenue  || 0;
+      if (!merged[ch]) merged[ch] = { installs: 0, cost: 0, revenue: 0, rev_d0: 0, rev_d1: 0, rev_d7: 0, clicks: 0, impressions: 0, ret_d1: 0, ret_d7: 0, ret_d30: 0 };
+      merged[ch].installs    += m.installs    || 0;
+      merged[ch].cost        += m.cost        || 0;
+      merged[ch].revenue     += m.revenue     || 0;
+      merged[ch].rev_d0      += m.rev_d0      || 0;
+      merged[ch].rev_d1      += m.rev_d1      || 0;
+      merged[ch].rev_d7      += m.rev_d7      || 0;
+      merged[ch].clicks      += m.clicks      || 0;
+      merged[ch].impressions += m.impressions || 0;
+      merged[ch].ret_d1      += m.ret_d1      || 0;
+      merged[ch].ret_d7      += m.ret_d7      || 0;
+      merged[ch].ret_d30     += m.ret_d30     || 0;
     }
   }
   return Object.keys(merged).length > 0 ? merged : null;

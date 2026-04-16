@@ -237,8 +237,8 @@ describe('parseAFChannels', () => {
   test('parses valid CSV into channel map', () => {
     const csv = `Date,Channel,Installs,Cost,Revenue\n2026-03-01,ACI_Search,100,50.5,200\n2026-03-01,ACI_Display,200,80.0,150\n`;
     const result = parseAFChannels(csv);
-    expect(result['ACI_Search']).toEqual({ installs: 100, cost: 50.5, revenue: 200 });
-    expect(result['ACI_Display']).toEqual({ installs: 200, cost: 80.0, revenue: 150 });
+    expect(result['ACI_Search']).toEqual({ installs: 100, cost: 50.5, revenue: 200, clicks: 0, impressions: 0 });
+    expect(result['ACI_Display']).toEqual({ installs: 200, cost: 80.0, revenue: 150, clicks: 0, impressions: 0 });
   });
 
   test('returns empty object for empty CSV (header only)', () => {

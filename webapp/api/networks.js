@@ -209,6 +209,8 @@ function parseAFChannelsByDate(raw) {
     const inIdx = headers.findIndex(h => h === 'installs');
     const coIdx = headers.findIndex(h => h === 'cost' || h === 'total cost');
     const reIdx = headers.findIndex(h => h === 'revenue' || h === 'total revenue');
+    const clIdx = headers.findIndex(h => h === 'clicks');
+    const imIdx = headers.findIndex(h => h === 'impressions');
     if (dtIdx === -1) return {};
     for (let i = 1; i < lines.length; i++) {
       const cols    = lines[i].split(',');
@@ -217,9 +219,11 @@ function parseAFChannelsByDate(raw) {
       if (!channel || !date) continue;
       if (!byDate[date]) byDate[date] = {};
       byDate[date][channel] = {
-        installs: inIdx >= 0 ? (parseFloat(cols[inIdx]) || 0) : 0,
-        cost:     coIdx >= 0 ? (parseFloat(cols[coIdx]) || 0) : 0,
-        revenue:  reIdx >= 0 ? (parseFloat(cols[reIdx]) || 0) : 0,
+        installs:    inIdx >= 0 ? (parseFloat(cols[inIdx]) || 0) : 0,
+        cost:        coIdx >= 0 ? (parseFloat(cols[coIdx]) || 0) : 0,
+        revenue:     reIdx >= 0 ? (parseFloat(cols[reIdx]) || 0) : 0,
+        clicks:      clIdx >= 0 ? (parseFloat(cols[clIdx]) || 0) : 0,
+        impressions: imIdx >= 0 ? (parseFloat(cols[imIdx]) || 0) : 0,
       };
     }
   }
@@ -236,10 +240,12 @@ function parseAFChannels(raw) {
   const result = {};
   for (const d of dates) {
     for (const [ch, m] of Object.entries(byDate[d])) {
-      if (!result[ch]) result[ch] = { installs: 0, cost: 0, revenue: 0 };
-      result[ch].installs += m.installs;
-      result[ch].cost     += m.cost;
-      result[ch].revenue  += m.revenue;
+      if (!result[ch]) result[ch] = { installs: 0, cost: 0, revenue: 0, clicks: 0, impressions: 0 };
+      result[ch].installs     += m.installs;
+      result[ch].cost         += m.cost;
+      result[ch].revenue      += m.revenue;
+      result[ch].clicks       += m.clicks || 0;
+      result[ch].impressions  += m.impressions || 0;
     }
   }
   return result;
@@ -249,13 +255,15 @@ function mergeAFChannelPlatforms(android, ios) {
   const a = android || {}, b = ios || {};
   const result = {};
   for (const [ch, m] of Object.entries(a)) {
-    result[ch] = { installs: m.installs, cost: m.cost, revenue: m.revenue };
+    result[ch] = { installs: m.installs, cost: m.cost, revenue: m.revenue, clicks: m.clicks || 0, impressions: m.impressions || 0 };
   }
   for (const [ch, m] of Object.entries(b)) {
-    if (!result[ch]) result[ch] = { installs: 0, cost: 0, revenue: 0 };
-    result[ch].installs += m.installs;
-    result[ch].cost     += m.cost;
-    result[ch].revenue  += m.revenue;
+    if (!result[ch]) result[ch] = { installs: 0, cost: 0, revenue: 0, clicks: 0, impressions: 0 };
+    result[ch].installs     += m.installs;
+    result[ch].cost         += m.cost;
+    result[ch].revenue      += m.revenue;
+    result[ch].clicks       += m.clicks || 0;
+    result[ch].impressions  += m.impressions || 0;
   }
   return result;
 }
