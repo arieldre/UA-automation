@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useFilters } from "@/hooks/useFilters";
 import type { ReportResponse } from "@/lib/types";
+import { API_BASE } from "@/lib/apiBase";
 
 interface UseDashboardDataReturn {
   data: ReportResponse | null;
@@ -30,7 +31,7 @@ export function useDashboardData(): UseDashboardDataReturn {
     setError(null);
 
     try {
-      const res = await fetch(`/api/report?from=${from}&to=${to}`, {
+      const res = await fetch(`${API_BASE}/api/report?from=${from}&to=${to}`, {
         signal: controller.signal,
       });
       if (!res.ok) {

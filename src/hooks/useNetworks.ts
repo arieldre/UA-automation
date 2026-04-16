@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useFilters } from "@/hooks/useFilters";
 import type { NetworksResponse } from "@/lib/types";
+import { API_BASE } from "@/lib/apiBase";
 
 interface UseNetworksReturn {
   data: NetworksResponse | null;
@@ -29,7 +30,7 @@ export function useNetworks(): UseNetworksReturn {
     setError(null);
 
     try {
-      const res = await fetch(`/api/networks?from=${from}&to=${to}`, {
+      const res = await fetch(`${API_BASE}/api/networks?from=${from}&to=${to}`, {
         signal: controller.signal,
       });
       if (!res.ok) {

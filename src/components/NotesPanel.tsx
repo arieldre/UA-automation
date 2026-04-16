@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { API_BASE } from "@/lib/apiBase";
 
 /* ── Types ── */
 
@@ -33,7 +34,7 @@ export default function NotesPanel() {
     setError(null);
 
     try {
-      const res = await fetch("/api/notes", { signal: controller.signal });
+      const res = await fetch(`${API_BASE}/api/notes`, { signal: controller.signal });
       if (!res.ok) throw new Error(`Notes API error: ${res.status}`);
       const json: Note[] = await res.json();
       setNotes(json);
@@ -71,7 +72,7 @@ export default function NotesPanel() {
     setSubmitting(true);
 
     try {
-      const res = await fetch("/api/notes", {
+      const res = await fetch(`${API_BASE}/api/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: savedText, author: savedAuthor }),
@@ -97,7 +98,7 @@ export default function NotesPanel() {
     setNotes((cur) => cur.filter((n) => n._id !== id));
 
     try {
-      const res = await fetch(`/api/notes?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/notes?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
     } catch {
       // Rollback on failure

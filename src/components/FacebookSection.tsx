@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useFilters } from "@/hooks/useFilters";
+import { API_BASE } from "@/lib/apiBase";
 import {
   formatCurrency,
   formatNumber,
@@ -209,7 +210,7 @@ export default function FacebookSection() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/facebook?from=${from}&to=${to}`, {
+      const res = await fetch(`${API_BASE}/api/facebook?from=${from}&to=${to}`, {
         signal: controller.signal,
       });
       if (!res.ok) {

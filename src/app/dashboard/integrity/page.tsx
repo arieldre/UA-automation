@@ -5,6 +5,7 @@ import { useDashboardData } from "@/hooks/useDashboardData";
 import { useFilters } from "@/hooks/useFilters";
 import IntegrityPanel, { type IntegrityRow } from "@/components/IntegrityPanel";
 import type { FacebookResponse } from "@/lib/types";
+import { API_BASE } from "@/lib/apiBase";
 
 // ── Build GA vs AF rows from report data ──
 
@@ -155,7 +156,7 @@ export default function IntegrityPage() {
 
     setFbLoading(true);
     try {
-      const res = await fetch(`/api/facebook?from=${from}&to=${to}`, {
+      const res = await fetch(`${API_BASE}/api/facebook?from=${from}&to=${to}`, {
         signal: controller.signal,
       });
       if (!res.ok) throw new Error(`Facebook API error: ${res.status}`);
