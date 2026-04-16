@@ -60,7 +60,11 @@ export interface DayData {
   all: { ga: ReportMetrics; af: AFMetrics };
   android: { ga: ReportMetrics; af: AFMetrics };
   ios: { ga: ReportMetrics; af: AFMetrics };
-  campaigns: Record<string, { ga: ReportMetrics; af: AFMetrics }>;
+  campaigns: Record<string, {
+    all: { ga: ReportMetrics; af: AFMetrics };
+    android: { ga: ReportMetrics; af: AFMetrics };
+    ios: { ga: ReportMetrics; af: AFMetrics };
+  }>;
   byMediaSource?: {
     android: Record<string, AFChannelMetrics>;
     ios: Record<string, AFChannelMetrics>;

@@ -105,13 +105,13 @@ export function buildCampaignRows(data: ReportResponse, os: string): TableRow[] 
 
   for (const day of data.days) {
     for (const [campaignName, campaignData] of Object.entries(day.campaigns)) {
-      // Campaign data is not split by OS in the API, so we use it directly
-      // Filter: if os is "all", show all campaigns; otherwise we still show all
-      // because campaigns aren't OS-specific in the data structure
+      const slice = os === "android" ? campaignData.android
+        : os === "ios" ? campaignData.ios
+        : campaignData.all;
       if (!campaignMap.has(campaignName)) {
         campaignMap.set(campaignName, []);
       }
-      campaignMap.get(campaignName)!.push(campaignData);
+      campaignMap.get(campaignName)!.push(slice);
     }
   }
 
@@ -176,8 +176,8 @@ export function buildDateRows(
 
   for (const day of data.days) {
     const campaignData = day.campaigns[campaign];
-    if (campaignData) {
-      dailyData.push({ date: day.date, af: campaignData.af });
+    if (campaignData?.all) {
+      dailyData.push({ date: day.date, af: campaignData.all.af });
     }
   }
 
@@ -229,7 +229,7 @@ export interface ChartPoint {
 export function buildChartData(data: ReportResponse, os: string, campaign?: string): ChartPoint[] {
   return data.days.map((day) => {
     if (campaign) {
-      const cd = day.campaigns[campaign];
+      const cd = day.campaigns[campaign]?.all;
       return {
         date: day.date,
         spend: cd?.af.spend ?? 0,

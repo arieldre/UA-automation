@@ -21,21 +21,15 @@ function buildGAvsAFRows(
 
   for (const day of data.days) {
     for (const [campaign, metrics] of Object.entries(day.campaigns)) {
-      // Determine which OS slices to include
-      const slices: Array<{ ga: import("@/lib/types").ReportMetrics; af: import("@/lib/types").AFMetrics }> = [];
+      // Each campaign has all/android/ios slices — pick based on OS filter
+      const oses: ("all" | "android" | "ios")[] =
+        osFilter.length === 0
+          ? ["all"]
+          : (osFilter as ("android" | "ios")[]);
 
-      if (osFilter.length === 0) {
-        // All OS — use the combined "all" metrics but we need per-campaign…
-        // day.campaigns is not split by OS in the type, so use combined
-        slices.push(metrics);
-      } else {
-        // day.campaigns doesn't expose OS splits per campaign in the type;
-        // the OS filter affects aggregate-level data. For campaign rows we use
-        // the same metrics object — the page-level OS filter is a best-effort.
-        slices.push(metrics);
-      }
-
-      for (const s of slices) {
+      for (const osKey of oses) {
+        const s = metrics[osKey];
+        if (!s) continue;
         const existing = map.get(campaign) ?? {
           aSpend: 0,
           aInstalls: 0,

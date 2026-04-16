@@ -221,11 +221,11 @@ function buildCampaignNodes(
         clicks: 0,
         revenue: 0,
       };
-      existing.spend += campaignData.ga.spend;
-      existing.installs += campaignData.af.installs;
-      existing.impressions += campaignData.ga.impressions;
-      existing.clicks += campaignData.ga.clicks;
-      existing.revenue += campaignData.af.revenue;
+      existing.spend += campaignData.all.ga.spend ?? 0;
+      existing.installs += campaignData.all.af.installs ?? 0;
+      existing.impressions += campaignData.all.ga.impressions ?? 0;
+      existing.clicks += campaignData.all.ga.clicks ?? 0;
+      existing.revenue += campaignData.all.af.revenue ?? 0;
       campaignMap.set(campaignName, existing);
     }
   }
