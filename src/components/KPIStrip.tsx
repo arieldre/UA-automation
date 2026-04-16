@@ -2,29 +2,44 @@
 
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useFilters } from "@/hooks/useFilters";
-import { formatCurrency, formatNumber, formatPercent, formatROAS } from "@/components/ui/Formatters";
-import type { AFMetrics, ReportResponse } from "@/lib/types";
+import { useMetricSelection } from "@/hooks/useMetricSelection";
+import type { ChartMetric } from "@/hooks/useMetricSelection";
+import MetricPill from "@/components/ui/MetricPill";
+import { formatCurrency, formatCompact, formatROAS } from "@/components/ui/Formatters";
+import type { ReportResponse, AFMetrics } from "@/lib/types";
 
-interface KPICard {
+// ── Pill config ──
+interface PillConfig {
+  metric: ChartMetric;
   label: string;
-  icon: string;
-  value: string;
-  colorClass?: string;
+  cssVar: string;
 }
 
-function computeKPIs(data: ReportResponse | null, os: string[]): KPICard[] {
-  if (!data) {
-    return [
-      { label: "Total Spend", icon: "\uD83D\uDCB0", value: "--" },
-      { label: "Total Installs", icon: "\uD83D\uDCF2", value: "--" },
-      { label: "Blended ROAS", icon: "\uD83D\uDCC8", value: "--" },
-      { label: "Avg D7 ARPU", icon: "\uD83D\uDCB5", value: "--" },
-      { label: "Avg IPM", icon: "\uD83C\uDFAF", value: "--" },
-      { label: "eCPI", icon: "\uD83C\uDFF7\uFE0F", value: "--" },
-    ];
-  }
+const PILLS: PillConfig[] = [
+  { metric: "spend",   label: "Spend",    cssVar: "var(--pill-spend)" },
+  { metric: "installs",label: "Installs", cssVar: "var(--pill-installs)" },
+  { metric: "revenue", label: "Revenue",  cssVar: "var(--pill-revenue)" },
+  { metric: "ecpi",    label: "eCPI",     cssVar: "var(--pill-ecpi)" },
+  { metric: "ipm",     label: "IPM",      cssVar: "var(--pill-ipm)" },
+  { metric: "cvr",     label: "CVR",      cssVar: "var(--pill-cvr)" },
+  { metric: "arpuD0",  label: "D0 ARPU",  cssVar: "var(--pill-arpu-d0)" },
+  { metric: "arpuD7",  label: "D7 ARPU",  cssVar: "var(--pill-arpu-d7)" },
+  { metric: "arpuD30", label: "D30 ARPU", cssVar: "var(--pill-arpu-d30)" },
+  { metric: "roasD0",  label: "ROAS D0",  cssVar: "var(--pill-roas-d0)" },
+  { metric: "roasD7",  label: "ROAS D7",  cssVar: "var(--pill-roas-d7)" },
+  { metric: "roasD30", label: "ROAS D30", cssVar: "var(--pill-roas-d30)" },
+];
 
-  // Determine which aggregate slice to use based on OS filter
+// ── Headline summary from aggregate ──
+interface Headlines {
+  spend: string;
+  installs: string;
+  roasD7: { text: string; colorClass: string };
+}
+
+function computeHeadlines(data: ReportResponse | null, os: string[]): Headlines | null {
+  if (!data) return null;
+
   let agg: { af: AFMetrics };
   if (os.length === 1 && os[0] === "android") {
     agg = data.aggregate.android;
@@ -35,63 +50,126 @@ function computeKPIs(data: ReportResponse | null, os: string[]): KPICard[] {
   }
 
   const af = agg.af;
-  const totalSpend = af.cost;
-  const totalInstalls = af.installs;
-  const blendedROAS = totalSpend > 0 ? af.revenue / totalSpend : 0;
-  const avgD7ARPU = totalInstalls > 0 ? af.revenue / totalInstalls : 0;
-  // IPM: installs per mille (impressions)
-  const avgIPM = af.impressions > 0 ? (af.installs / af.impressions) * 1000 : 0;
-  const ecpi = totalInstalls > 0 ? totalSpend / totalInstalls : 0;
+  const roasRaw = af.cost > 0 ? af.revenue / af.cost : 0;
 
-  const roas = formatROAS(blendedROAS);
-
-  return [
-    { label: "Total Spend", icon: "\uD83D\uDCB0", value: formatCurrency(totalSpend) },
-    { label: "Total Installs", icon: "\uD83D\uDCF2", value: formatNumber(totalInstalls) },
-    { label: "Blended ROAS", icon: "\uD83D\uDCC8", value: roas.text, colorClass: roas.colorClass },
-    { label: "Avg D7 ARPU", icon: "\uD83D\uDCB5", value: formatCurrency(avgD7ARPU) },
-    { label: "Avg IPM", icon: "\uD83C\uDFAF", value: formatPercent(avgIPM) },
-    { label: "eCPI", icon: "\uD83C\uDFF7\uFE0F", value: formatCurrency(ecpi) },
-  ];
+  return {
+    spend: "$" + formatCompact(af.cost),
+    installs: formatCompact(af.installs),
+    roasD7: formatROAS(roasRaw),
+  };
 }
 
 export default function KPIStrip() {
   const { data, loading } = useDashboardData();
   const { filters } = useFilters();
-  const kpis = computeKPIs(data, filters.os);
+  const { primary, secondary, toggle } = useMetricSelection();
+
+  const headlines = computeHeadlines(data, filters.os);
+
+  const handlePillClick = (metric: ChartMetric, e: React.MouseEvent) => {
+    toggle(metric, e.shiftKey);
+  };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 px-4 py-3">
-      {kpis.map((kpi) => (
-        <div
-          key={kpi.label}
-          className="rounded-xl p-3 flex flex-col gap-1"
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm">{kpi.icon}</span>
-            <span className="text-[11px] font-medium" style={{ color: "var(--muted)" }}>
-              {kpi.label}
-            </span>
-          </div>
-          <span
-            className={`text-lg font-bold ${kpi.colorClass ?? ""}`}
-            style={kpi.colorClass ? undefined : { color: "var(--text)" }}
-          >
-            {loading ? (
+    <div
+      style={{
+        borderBottom: "1px solid var(--border)",
+        padding: "10px 20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      {/* Pill row */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "nowrap",
+          overflowX: "auto",
+          gap: 6,
+          scrollbarWidth: "none",
+        }}
+      >
+        {loading
+          ? PILLS.map((p) => (
               <span
-                className="inline-block w-16 h-5 rounded animate-pulse"
-                style={{ background: "var(--surface2)" }}
+                key={p.metric}
+                className="animate-pulse"
+                style={{
+                  display: "inline-block",
+                  width: 72,
+                  height: 26,
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: "var(--surface2)",
+                  flexShrink: 0,
+                }}
               />
-            ) : (
-              kpi.value
-            )}
-          </span>
-        </div>
-      ))}
+            ))
+          : PILLS.map((p) => (
+              // Outer div captures the MouseEvent for shift-key detection;
+              // MetricPill.onClick is typed as () => void so we pass a noop there.
+              <div
+                key={p.metric}
+                style={{ flexShrink: 0 }}
+                onClick={(e) => handlePillClick(p.metric, e)}
+              >
+                <MetricPill
+                  label={p.label}
+                  dotColor={p.cssVar}
+                  active={primary === p.metric || secondary === p.metric}
+                  onClick={() => {}}
+                />
+              </div>
+            ))}
+      </div>
+
+      {/* Summary strip */}
+      <div
+        style={{
+          display: "flex",
+          gap: 16,
+          fontSize: 12,
+          color: "var(--muted)",
+          alignItems: "center",
+        }}
+      >
+        {loading || !headlines ? (
+          <>
+            {[80, 72, 80].map((w, i) => (
+              <span
+                key={i}
+                className="animate-pulse"
+                style={{
+                  display: "inline-block",
+                  width: w,
+                  height: 14,
+                  borderRadius: 4,
+                  backgroundColor: "var(--surface2)",
+                }}
+              />
+            ))}
+          </>
+        ) : (
+          <>
+            <span>
+              Spend:{" "}
+              <span style={{ color: "var(--text)", fontWeight: 600 }}>{headlines.spend}</span>
+            </span>
+            <span style={{ color: "var(--border)" }}>·</span>
+            <span>
+              Installs:{" "}
+              <span style={{ color: "var(--text)", fontWeight: 600 }}>{headlines.installs}</span>
+            </span>
+            <span style={{ color: "var(--border)" }}>·</span>
+            <span>
+              ROAS D7:{" "}
+              <span className={headlines.roasD7.colorClass} style={{ fontWeight: 600 }}>
+                {headlines.roasD7.text}
+              </span>
+            </span>
+          </>
+        )}
+      </div>
     </div>
   );
 }

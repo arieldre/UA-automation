@@ -209,9 +209,14 @@ export type Granularity = "daily" | "weekly" | "monthly";
 export type ChartMetric =
   | "spend"
   | "installs"
+  | "revenue"
   | "ecpi"
+  | "ipm"
   | "arpuD0"
   | "arpuD7"
   | "arpuD30"
+  | "roasD0"
   | "roasD7"
-  | "ipm";
+  | "roasD30"
+  | "cvr"
+  | "ctr";

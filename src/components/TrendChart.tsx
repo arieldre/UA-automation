@@ -12,30 +12,44 @@ import {
 } from "recharts";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useFilters } from "@/hooks/useFilters";
-import type { ChartMetric, Granularity, DayData } from "@/lib/types";
+import { useMetricSelection } from "@/hooks/useMetricSelection";
+import type { ChartMetric } from "@/hooks/useMetricSelection";
+import type { Granularity, DayData } from "@/lib/types";
 import { formatCurrency, formatNumber, formatPercent } from "@/components/ui/Formatters";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
+
+// ── Resolve CSS variable to a color string ──
+function getCSSVar(name: string): string {
+  if (typeof window === "undefined") return "#888";
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#888";
+}
 
 // ── Metric config ──
 interface MetricConfig {
   key: ChartMetric;
   label: string;
-  color: string;
+  cssVar: string;
   yAxisId: "left" | "right";
   formatter: (v: number) => string;
 }
 
 const METRICS: MetricConfig[] = [
-  { key: "spend", label: "Spend", color: "#7c6fff", yAxisId: "left", formatter: formatCurrency },
-  { key: "installs", label: "Installs", color: "#22c55e", yAxisId: "left", formatter: formatNumber },
-  { key: "ecpi", label: "eCPI", color: "#f97316", yAxisId: "left", formatter: formatCurrency },
-  { key: "arpuD0", label: "D0 ARPU", color: "#06b6d4", yAxisId: "left", formatter: formatCurrency },
-  { key: "arpuD7", label: "D7 ARPU", color: "#8b5cf6", yAxisId: "left", formatter: formatCurrency },
-  { key: "arpuD30", label: "D30 ARPU", color: "#ec4899", yAxisId: "left", formatter: formatCurrency },
-  { key: "roasD7", label: "ROAS D7", color: "#eab308", yAxisId: "right", formatter: formatPercent },
-  { key: "ipm", label: "IPM", color: "#14b8a6", yAxisId: "left", formatter: formatNumber },
+  { key: "spend",    label: "Spend",    cssVar: "--pill-spend",    yAxisId: "left",  formatter: formatCurrency },
+  { key: "installs", label: "Installs", cssVar: "--pill-installs", yAxisId: "left",  formatter: formatNumber },
+  { key: "revenue",  label: "Revenue",  cssVar: "--pill-revenue",  yAxisId: "left",  formatter: formatCurrency },
+  { key: "ecpi",     label: "eCPI",     cssVar: "--pill-ecpi",     yAxisId: "left",  formatter: formatCurrency },
+  { key: "ipm",      label: "IPM",      cssVar: "--pill-ipm",      yAxisId: "left",  formatter: formatNumber },
+  { key: "cvr",      label: "CVR",      cssVar: "--pill-cvr",      yAxisId: "right", formatter: formatPercent },
+  { key: "ctr",      label: "CTR",      cssVar: "--pill-ctr",      yAxisId: "right", formatter: formatPercent },
+  { key: "arpuD0",   label: "D0 ARPU",  cssVar: "--pill-arpu-d0",  yAxisId: "left",  formatter: formatCurrency },
+  { key: "arpuD7",   label: "D7 ARPU",  cssVar: "--pill-arpu-d7",  yAxisId: "left",  formatter: formatCurrency },
+  { key: "arpuD30",  label: "D30 ARPU", cssVar: "--pill-arpu-d30", yAxisId: "left",  formatter: formatCurrency },
+  { key: "roasD0",   label: "ROAS D0",  cssVar: "--pill-roas-d0",  yAxisId: "right", formatter: formatPercent },
+  { key: "roasD7",   label: "ROAS D7",  cssVar: "--pill-roas-d7",  yAxisId: "right", formatter: formatPercent },
+  { key: "roasD30",  label: "ROAS D30", cssVar: "--pill-roas-d30", yAxisId: "right", formatter: formatPercent },
 ];
 
-// ── Extract metric from a day ──
+// ── Extract metric value from a day slice ──
 function extractMetric(day: DayData, metric: ChartMetric, os: string[]): number {
   const slice =
     os.length === 1 && os[0] === "android"
@@ -46,19 +60,24 @@ function extractMetric(day: DayData, metric: ChartMetric, os: string[]): number 
 
   const af = slice.af;
   switch (metric) {
-    case "spend": return af.cost;
+    case "spend":    return af.cost;
     case "installs": return af.installs;
-    case "ecpi": return af.installs > 0 ? af.cost / af.installs : 0;
-    case "arpuD0": return af.installs > 0 ? af.revenue / af.installs : 0; // placeholder — D0 specific not in type
-    case "arpuD7": return af.installs > 0 ? af.revenue / af.installs : 0;
-    case "arpuD30": return af.installs > 0 ? af.revenue / af.installs : 0;
-    case "roasD7": return af.cost > 0 ? (af.revenue / af.cost) * 100 : 0;
-    case "ipm": return af.impressions > 0 ? (af.installs / af.impressions) * 1000 : 0;
-    default: return 0;
+    case "revenue":  return af.revenue;
+    case "ecpi":     return af.installs > 0 ? af.cost / af.installs : 0;
+    case "ipm":      return af.impressions > 0 ? (af.installs / af.impressions) * 1000 : 0;
+    case "cvr":      return af.clicks > 0 ? (af.installs / af.clicks) * 100 : 0;
+    case "ctr":      return af.impressions > 0 ? (af.clicks / af.impressions) * 100 : 0;
+    case "arpuD0":   return af.installs > 0 ? af.revenue / af.installs : 0;
+    case "arpuD7":   return af.installs > 0 ? af.revenue / af.installs : 0;
+    case "arpuD30":  return af.installs > 0 ? af.revenue / af.installs : 0;
+    case "roasD0":   return af.cost > 0 ? (af.revenue / af.cost) * 100 : 0;
+    case "roasD7":   return af.cost > 0 ? (af.revenue / af.cost) * 100 : 0;
+    case "roasD30":  return af.cost > 0 ? (af.revenue / af.cost) * 100 : 0;
+    default:         return 0;
   }
 }
 
-// ── Granularity grouping ──
+// ── Granularity helpers ──
 function weekKey(dateStr: string): string {
   const d = new Date(dateStr);
   const day = d.getDay();
@@ -71,6 +90,11 @@ function monthKey(dateStr: string): string {
   return dateStr.slice(0, 7);
 }
 
+const RATE_METRICS: ChartMetric[] = [
+  "ecpi", "arpuD0", "arpuD7", "arpuD30",
+  "roasD0", "roasD7", "roasD30", "ipm", "cvr", "ctr",
+];
+
 function groupDays(
   days: DayData[],
   granularity: Granularity,
@@ -80,14 +104,11 @@ function groupDays(
   if (granularity === "daily") {
     return days.map((day) => {
       const row: Record<string, number | string> = { date: day.date };
-      for (const m of activeMetrics) {
-        row[m] = extractMetric(day, m, os);
-      }
+      for (const m of activeMetrics) row[m] = extractMetric(day, m, os);
       return row;
     });
   }
 
-  // Group by week or month
   const keyFn = granularity === "weekly" ? weekKey : monthKey;
   const groups = new Map<string, DayData[]>();
   for (const day of days) {
@@ -99,14 +120,11 @@ function groupDays(
   return Array.from(groups.entries()).map(([key, groupDays]) => {
     const row: Record<string, number | string> = { date: key };
     for (const m of activeMetrics) {
-      // Average for rate metrics, sum for absolute
       const values = groupDays.map((d) => extractMetric(d, m, os));
-      const isRate = ["ecpi", "arpuD0", "arpuD7", "arpuD30", "roasD7", "ipm"].includes(m);
-      if (isRate) {
-        row[m] = values.reduce((a, b) => a + b, 0) / values.length;
-      } else {
-        row[m] = values.reduce((a, b) => a + b, 0);
-      }
+      const isRate = RATE_METRICS.includes(m);
+      row[m] = isRate
+        ? values.reduce((a, b) => a + b, 0) / values.length
+        : values.reduce((a, b) => a + b, 0);
     }
     return row;
   });
@@ -132,8 +150,13 @@ function ChartTooltip({
 
   return (
     <div
-      className="rounded-lg p-3 text-xs shadow-lg"
-      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      className="rounded-lg p-3 text-xs"
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+        fontFamily: "Inter, sans-serif",
+      }}
     >
       <p className="font-medium mb-1.5" style={{ color: "var(--text)" }}>
         {label}
@@ -143,11 +166,11 @@ function ChartTooltip({
         return (
           <div key={entry.dataKey} className="flex items-center gap-2 py-0.5">
             <span
-              className="inline-block w-2.5 h-2.5 rounded-full"
+              className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
               style={{ background: entry.color }}
             />
             <span style={{ color: "var(--muted)" }}>{config?.label ?? entry.dataKey}:</span>
-            <span style={{ color: "var(--text)" }}>
+            <span style={{ color: "var(--text)", fontWeight: 500 }}>
               {config ? config.formatter(entry.value) : entry.value}
             </span>
           </div>
@@ -161,14 +184,23 @@ function ChartTooltip({
 export default function TrendChart() {
   const { data } = useDashboardData();
   const { filters } = useFilters();
-  const [activeMetrics, setActiveMetrics] = useState<ChartMetric[]>(["spend", "installs"]);
+  const { primary, secondary } = useMetricSelection();
   const [granularity, setGranularity] = useState<Granularity>("daily");
 
-  const toggleMetric = (m: ChartMetric) => {
-    setActiveMetrics((prev) =>
-      prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
-    );
-  };
+  // Derive active metrics from shared selection state
+  const activeMetrics = useMemo(
+    () => [primary, ...(secondary ? [secondary] : [])] as ChartMetric[],
+    [primary, secondary]
+  );
+
+  // Resolve CSS vars to actual color strings once per render
+  const metricColors = useMemo(() => {
+    const result: Partial<Record<ChartMetric, string>> = {};
+    for (const m of METRICS) {
+      result[m.key] = getCSSVar(m.cssVar);
+    }
+    return result;
+  }, []);
 
   const chartData = useMemo(() => {
     if (!data?.days?.length) return [];
@@ -181,57 +213,29 @@ export default function TrendChart() {
 
   return (
     <div
-      className="rounded-xl p-4 mb-4"
-      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      className="mb-4"
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius)",
+        padding: 20,
+      }}
     >
-      {/* Header: metric toggles + granularity */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        {/* Metric chips */}
-        <div className="flex flex-wrap gap-1.5">
-          {METRICS.map((m) => {
-            const active = activeMetrics.includes(m.key);
-            return (
-              <button
-                key={m.key}
-                type="button"
-                onClick={() => toggleMetric(m.key)}
-                className="rounded-full px-3 py-1 text-[11px] font-medium transition-all cursor-pointer"
-                style={{
-                  background: active ? m.color + "20" : "var(--surface2)",
-                  color: active ? m.color : "var(--muted)",
-                  border: `1px solid ${active ? m.color + "40" : "var(--border)"}`,
-                }}
-              >
-                <span
-                  className="inline-block w-2 h-2 rounded-full mr-1.5"
-                  style={{ background: active ? m.color : "var(--muted)" }}
-                />
-                {m.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Granularity toggle */}
-        <div
-          className="flex rounded-lg overflow-hidden text-xs"
-          style={{ border: "1px solid var(--border)" }}
-        >
-          {(["daily", "weekly", "monthly"] as const).map((g) => (
-            <button
-              key={g}
-              type="button"
-              onClick={() => setGranularity(g)}
-              className="px-3 py-1.5 text-xs transition-colors cursor-pointer capitalize"
-              style={{
-                background: granularity === g ? "var(--accent)" : "var(--surface2)",
-                color: granularity === g ? "#fff" : "var(--text)",
-              }}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
+      {/* Header: granularity only — metric selection is in KPIStrip */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+          {activeMetrics.map((m) => METRICS.find((c) => c.key === m)?.label).filter(Boolean).join(" · ")}
+        </p>
+        <SegmentedToggle
+          options={[
+            { value: "daily",   label: "Day" },
+            { value: "weekly",  label: "Wk" },
+            { value: "monthly", label: "Mo" },
+          ]}
+          value={granularity}
+          onChange={(v) => setGranularity(v as Granularity)}
+          size="sm"
+        />
       </div>
 
       {/* Chart */}
@@ -281,17 +285,19 @@ export default function TrendChart() {
               wrapperStyle={{ fontSize: 11, color: "var(--muted)" }}
             />
             {activeMetrics.map((m) => {
-              const config = METRICS.find((c) => c.key === m)!;
+              const config = METRICS.find((c) => c.key === m);
+              if (!config) return null;
+              const color = metricColors[m] ?? "#888";
               return (
                 <Line
                   key={m}
                   type="monotone"
                   dataKey={m}
                   yAxisId={config.yAxisId}
-                  stroke={config.color}
+                  stroke={color}
                   strokeWidth={2}
                   dot={false}
-                  activeDot={{ r: 4, fill: config.color }}
+                  activeDot={{ r: 4, fill: color }}
                   name={config.label}
                 />
               );
