@@ -146,27 +146,21 @@ const AF_CHANNEL_CONFIG = [
 async function fetchAFChannels(appId, from, to) {
   if (!APPSFLYER_TOKEN || !appId) return { _afError: 'missing config' };
   try {
-    // Try aggregate endpoints that may return a Channel column
-    const aggEndpoints = [
-      `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/channel_by_date_report/v5?from=${from}&to=${to}&media_source=googleadwords_int&category=standard`,
-      `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_channel_report/v5?from=${from}&to=${to}&media_source=googleadwords_int&category=standard`,
-      `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_by_date_report/v5?from=${from}&to=${to}&media_source=googleadwords_int&category=standard&groupings=channel`,
-    ];
-    for (const url of aggEndpoints) {
-      const r    = await fetch(url, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
-      const text = await r.text();
-      if (!r.ok || text.trim().startsWith('{')) continue;
-      // Only use if response has a Channel column
-      const header = text.split('\n')[0].toLowerCase();
-      if (header.includes('channel')) return text;
-    }
-    // Fallback: raw installs report — has Channel column per install record
-    const rawUrl = `https://hq1.appsflyer.com/api/raw-data/export/app/${appId}/installs_report/v5` +
-      `?from=${from}&to=${to}&media_source=googleadwords_int&category=standard&maximum_rows=500000`;
-    const r    = await fetch(rawUrl, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
+    // Primary: partners_by_date_report with NO media_source filter — returns ALL channels
+    const url = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/partners_by_date_report/v5?from=${from}&to=${to}&category=standard`;
+    const r    = await fetch(url, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
     const text = await r.text();
-    if (!r.ok || text.trim().startsWith('{')) return { _afError: text.substring(0, 200) };
-    return { _raw: true, csv: text };
+    if (r.ok && !text.trim().startsWith('{')) {
+      const header = text.split('\n')[0].toLowerCase();
+      // Accept if response contains a media source (pid) or channel column
+      if (header.includes('media source') || header.includes('channel')) return text;
+    }
+    // Fallback: channel_by_date_report (Google Ads sub-channels only)
+    const fallbackUrl = `https://hq1.appsflyer.com/api/agg-data/export/app/${appId}/channel_by_date_report/v5?from=${from}&to=${to}&category=standard`;
+    const r2    = await fetch(fallbackUrl, { headers: { 'Authorization': `Bearer ${APPSFLYER_TOKEN}` } });
+    const text2 = await r2.text();
+    if (r2.ok && !text2.trim().startsWith('{')) return text2;
+    return { _afError: text.substring(0, 200) };
   } catch (e) {
     return { _afError: e.message };
   }
@@ -182,7 +176,8 @@ function parseAFChannelsByDate(raw) {
   if (lines.length < 2) return {};
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
 
-  const chIdx = headers.findIndex(h => h === 'channel');
+  // Accept "media source (pid)", "media source", or "channel"
+  const chIdx = headers.findIndex(h => h.startsWith('media source') || h === 'channel');
   if (chIdx === -1) return {};
 
   const byDate = {};
