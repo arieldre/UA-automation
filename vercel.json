@@ -1,21 +1,5 @@
 {
   "framework": "nextjs",
-  "functions": {
-    "webapp/api/**/*.js": {
-      "runtime": "@vercel/node@3"
-    }
-  },
-  "rewrites": [
-    { "source": "/api/report", "destination": "/webapp/api/report.js" },
-    { "source": "/api/facebook", "destination": "/webapp/api/facebook.js" },
-    { "source": "/api/networks", "destination": "/webapp/api/networks.js" },
-    { "source": "/api/networks-compare", "destination": "/webapp/api/networks-compare.js" },
-    { "source": "/api/campaigns", "destination": "/webapp/api/campaigns.js" },
-    { "source": "/api/assets", "destination": "/webapp/api/assets.js" },
-    { "source": "/api/af-daily", "destination": "/webapp/api/af-daily.js" },
-    { "source": "/api/notes", "destination": "/webapp/api/notes.js" },
-    { "source": "/api/cron/refresh", "destination": "/webapp/api/cron/refresh.js" }
-  ],
   "crons": [
     { "path": "/api/cron/refresh", "schedule": "0 6 * * *" }
   ]
