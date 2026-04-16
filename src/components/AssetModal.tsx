@@ -152,8 +152,10 @@ function AssetTable({ typeLabel, assets }: AssetTableProps) {
           {assets.map((a, i) => (
             <tr
               key={i}
-              className="border-b hover:bg-white/[0.02]"
+              className="border-b"
               style={{ borderColor: "var(--border)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.03)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
               <td className="px-2 py-1.5 text-left max-w-[300px]">
                 <div className="flex items-center gap-2">
@@ -385,7 +387,9 @@ export default function AssetModal({
           </h3>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-md text-lg hover:bg-white/10 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-md text-lg transition-colors"
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,0,0,0.06)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
             style={{ color: "var(--muted)" }}
           >
             &times;

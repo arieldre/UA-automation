@@ -149,8 +149,10 @@ function AccountTable({ label, badgeColor, account }: AccountTableProps) {
             {account.campaigns.map((c, i) => (
               <tr
                 key={i}
-                className="border-b hover:bg-white/[0.02]"
+                className="border-b"
                 style={{ borderColor: "var(--border)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.03)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
               >
                 {COLUMNS.map((col) => (
                   <td

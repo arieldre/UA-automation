@@ -206,6 +206,41 @@ function flattenVisible(
   return rows;
 }
 
+// ── CSV export ──
+
+function exportCSV(visibleRows: FlatRow[]) {
+  const headers = ["Level", "Name", "Spend", "Installs", "Revenue", "eCPI", "IPM", "CVR", "D0 ARPU", "D7 ARPU", "D30 ARPU", "ROAS D0", "ROAS D7", "ROAS D30"];
+  const dataRows = visibleRows
+    .filter((r) => !r.isShowMore)
+    .map((r) => {
+      const n = r.node;
+      return [
+        n.level,
+        `"${n.name.replace(/"/g, '""')}"`,
+        n.metrics.spend.toFixed(2),
+        n.metrics.installs,
+        n.metrics.revenue.toFixed(2),
+        n.metrics.ecpi.toFixed(2),
+        n.metrics.ipm.toFixed(2),
+        n.metrics.cvr.toFixed(2),
+        (n.metrics.arpu || 0).toFixed(2),
+        "0",
+        "0",
+        (n.metrics.roas * 100).toFixed(1) + "%",
+        "0%",
+        "0%",
+      ];
+    });
+  const csv = [headers, ...dataRows].map((r) => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ua-report.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Component ──
 
 export default function TreeTable() {
@@ -368,17 +403,30 @@ export default function TreeTable() {
             </span>
           )}
         </div>
-        <button
-          onClick={allExpanded ? collapseAll : expandAll}
-          className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer"
-          style={{
-            background: "var(--surface2)",
-            color: "var(--muted)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          {allExpanded ? "Collapse All" : "Expand All"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportCSV(visibleRows)}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer"
+            style={{
+              background: "var(--surface2)",
+              color: "var(--muted)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            &#8595; CSV
+          </button>
+          <button
+            onClick={allExpanded ? collapseAll : expandAll}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer"
+            style={{
+              background: "var(--surface2)",
+              color: "var(--muted)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            {allExpanded ? "Collapse All" : "Expand All"}
+          </button>
+        </div>
       </div>
 
       {/* ── Table ── */}

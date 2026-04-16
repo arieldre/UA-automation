@@ -4,17 +4,18 @@ import { useFilters } from "@/hooks/useFilters";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import DateRangePicker from "@/components/ui/DateRangePicker";
 import MultiSelect, { type MultiSelectOption } from "@/components/ui/MultiSelect";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import { useCallback, useState, useEffect } from "react";
 import type { FilterState } from "@/lib/types";
 
 // ── Static media source options ──
 const MEDIA_SOURCES: MultiSelectOption[] = [
-  { value: "googleadwords_int", label: "Google Ads", icon: "\uD83C\uDF10" },
-  { value: "Meta Ads", label: "Meta", icon: "\uD83D\uDFE6" },
-  { value: "tiktokglobal_int", label: "TikTok", icon: "\uD83C\uDFB5" },
-  { value: "unityads_int", label: "Unity", icon: "\uD83C\uDFAE" },
-  { value: "applovin_int", label: "AppLovin", icon: "\uD83E\uDD81" },
-  { value: "moloco_int", label: "Moloco", icon: "\uD83D\uDD35" },
+  { value: "googleadwords_int", label: "Google Ads" },
+  { value: "Meta Ads", label: "Meta" },
+  { value: "tiktokglobal_int", label: "TikTok" },
+  { value: "unityads_int", label: "Unity" },
+  { value: "applovin_int", label: "AppLovin" },
+  { value: "moloco_int", label: "Moloco" },
 ];
 
 type OsValue = "android" | "ios";
@@ -89,25 +90,16 @@ export default function FilterBar() {
       <DateRangePicker value={filters.dateRange} onChange={setDateRange} />
 
       {/* OS toggle group */}
-      <div
-        className="flex rounded-lg overflow-hidden text-xs"
-        style={{ border: "1px solid var(--border)" }}
-      >
-        {(["all", "android", "ios"] as const).map((val) => (
-          <button
-            key={val}
-            type="button"
-            onClick={() => handleOs(val)}
-            className="px-3 py-1.5 text-xs transition-colors cursor-pointer"
-            style={{
-              background: osValue === val ? "var(--accent)" : "var(--surface2)",
-              color: osValue === val ? "#fff" : "var(--text)",
-            }}
-          >
-            {val === "all" ? "All" : val === "android" ? "Android" : "iOS"}
-          </button>
-        ))}
-      </div>
+      <SegmentedToggle
+        size="sm"
+        options={[
+          { value: "all", label: "All" },
+          { value: "android", label: "Android" },
+          { value: "ios", label: "iOS" },
+        ]}
+        value={osValue}
+        onChange={(v) => handleOs(v as "all" | OsValue)}
+      />
 
       {/* Media Source */}
       <MultiSelect

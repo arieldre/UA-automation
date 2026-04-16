@@ -80,9 +80,11 @@ function CampaignGroup({ campaign }: CampaignGroupProps) {
     <>
       {/* Campaign total row */}
       <tr
-        className="border-b cursor-pointer hover:bg-white/[0.03] font-semibold"
+        className="border-b cursor-pointer font-semibold"
         style={{ borderColor: "var(--border)" }}
         onClick={() => setExpanded(!expanded)}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.03)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
       >
         <td className="px-3 py-2 whitespace-nowrap text-left">
           <ChevronIcon expanded={expanded} />
@@ -103,8 +105,10 @@ function CampaignGroup({ campaign }: CampaignGroupProps) {
         campaign.networks.map((net, i) => (
           <tr
             key={i}
-            className="border-b hover:bg-white/[0.02]"
+            className="border-b"
             style={{ borderColor: "var(--border)" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.03)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
           >
             <td
               className="px-3 py-2 whitespace-nowrap text-left pl-10"
@@ -129,8 +133,10 @@ function CampaignGroup({ campaign }: CampaignGroupProps) {
         Object.entries(campaign.afChannelRows).map(([channel, row]) => (
           <tr
             key={`af-${channel}`}
-            className="border-b hover:bg-white/[0.02]"
+            className="border-b"
             style={{ borderColor: "var(--border)" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.03)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
           >
             <td
               className="px-3 py-2 whitespace-nowrap text-left pl-10 italic"

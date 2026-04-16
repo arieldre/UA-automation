@@ -234,7 +234,9 @@ export default function NotesPanel() {
           {/* Delete button */}
           <button
             onClick={() => handleDelete(note._id)}
-            className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-md text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10"
+            className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-md text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,0,0,0.06)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
             style={{ color: "var(--muted)" }}
             title="Delete note"
           >
