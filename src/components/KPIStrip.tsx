@@ -50,10 +50,10 @@ function computeHeadlines(data: ReportResponse | null, os: string[]): Headlines 
   }
 
   const af = agg.af;
-  const roasRaw = af.cost > 0 ? af.revenue / af.cost : 0;
+  const roasRaw = af.spend > 0 ? af.revenue / af.spend : 0;
 
   return {
-    spend: "$" + formatCompact(af.cost),
+    spend: "$" + formatCompact(af.spend),
     installs: formatCompact(af.installs),
     roasD7: formatROAS(roasRaw),
   };

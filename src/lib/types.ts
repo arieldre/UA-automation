@@ -32,14 +32,15 @@ export interface AFMetrics {
   installs: number;
   clicks: number;
   impressions: number;
-  cost: number;
+  /** The API returns this field as "spend" (not "cost"). */
+  spend: number;
   revenue: number;
-  ecpiAF: number;
-  cpmAF: number;
-  ctrAF: number;
-  cvrAF: number;
-  roasAF: number;
-  arpuAF: number;
+  ecpi: number;
+  cpm: number;
+  ctr: number;
+  cvr: number;
+  roas: number;
+  arpu: number;
 }
 
 export interface AFChannelMetrics {

@@ -138,7 +138,7 @@ export default function FilterBar() {
           value={filters.campaignSearch}
           onChange={(e) => setCampaignSearch(e.target.value)}
           placeholder="Search campaigns..."
-          className="rounded-lg pl-7 pr-3 py-1.5 text-xs outline-none w-44"
+          className="rounded-lg pl-8 pr-3 py-1.5 text-xs outline-none w-44"
           style={{
             background: "var(--surface2)",
             border: "1px solid var(--border)",

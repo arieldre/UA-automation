@@ -21,16 +21,16 @@ export interface TableRow {
 
 function metricsFromAF(af: AFMetrics): Omit<TableRow, "name" | "clickable"> {
   return {
-    spend: af.cost,
+    spend: af.spend,
     installs: af.installs,
     revenue: af.revenue,
-    ecpi: af.installs > 0 ? af.cost / af.installs : 0,
+    ecpi: af.installs > 0 ? af.spend / af.installs : 0,
     ipm: af.impressions > 0 ? (af.installs / af.impressions) * 1000 : 0,
-    cpm: af.cpmAF,
-    ctr: af.ctrAF,
-    cvr: af.cvrAF,
-    roas: af.roasAF,
-    arpu: af.arpuAF,
+    cpm: af.cpm,
+    ctr: af.ctr,
+    cvr: af.cvr,
+    roas: af.roas,
+    arpu: af.arpu,
   };
 }
 
@@ -39,31 +39,31 @@ function sumAFMetrics(days: { af: AFMetrics }[]): AFMetrics {
     installs: 0,
     clicks: 0,
     impressions: 0,
-    cost: 0,
+    spend: 0,
     revenue: 0,
-    ecpiAF: 0,
-    cpmAF: 0,
-    ctrAF: 0,
-    cvrAF: 0,
-    roasAF: 0,
-    arpuAF: 0,
+    ecpi: 0,
+    cpm: 0,
+    ctr: 0,
+    cvr: 0,
+    roas: 0,
+    arpu: 0,
   };
 
   for (const d of days) {
     sum.installs += d.af.installs;
     sum.clicks += d.af.clicks;
     sum.impressions += d.af.impressions;
-    sum.cost += d.af.cost;
+    sum.spend += d.af.spend;
     sum.revenue += d.af.revenue;
   }
 
   // Derived
-  sum.ecpiAF = sum.installs > 0 ? sum.cost / sum.installs : 0;
-  sum.cpmAF = sum.impressions > 0 ? (sum.cost / sum.impressions) * 1000 : 0;
-  sum.ctrAF = sum.impressions > 0 ? (sum.clicks / sum.impressions) * 100 : 0;
-  sum.cvrAF = sum.clicks > 0 ? (sum.installs / sum.clicks) * 100 : 0;
-  sum.roasAF = sum.cost > 0 ? sum.revenue / sum.cost : 0;
-  sum.arpuAF = sum.installs > 0 ? sum.revenue / sum.installs : 0;
+  sum.ecpi = sum.installs > 0 ? sum.spend / sum.installs : 0;
+  sum.cpm = sum.impressions > 0 ? (sum.spend / sum.impressions) * 1000 : 0;
+  sum.ctr = sum.impressions > 0 ? (sum.clicks / sum.impressions) * 100 : 0;
+  sum.cvr = sum.clicks > 0 ? (sum.installs / sum.clicks) * 100 : 0;
+  sum.roas = sum.spend > 0 ? sum.revenue / sum.spend : 0;
+  sum.arpu = sum.installs > 0 ? sum.revenue / sum.installs : 0;
 
   return sum;
 }
@@ -232,7 +232,7 @@ export function buildChartData(data: ReportResponse, os: string, campaign?: stri
       const cd = day.campaigns[campaign];
       return {
         date: day.date,
-        spend: cd?.af.cost ?? 0,
+        spend: cd?.af.spend ?? 0,
         installs: cd?.af.installs ?? 0,
       };
     }
@@ -240,7 +240,7 @@ export function buildChartData(data: ReportResponse, os: string, campaign?: stri
     const slice = getOSSlice(day, os);
     return {
       date: day.date,
-      spend: slice.af.cost,
+      spend: slice.af.spend,
       installs: slice.af.installs,
     };
   });

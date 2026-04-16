@@ -46,7 +46,7 @@ function buildGAvsAFRows(
         map.set(campaign, {
           aSpend: existing.aSpend + (s.ga.spend ?? 0),
           aInstalls: existing.aInstalls + (s.ga.conversions ?? 0),
-          bSpend: existing.bSpend + (s.af.cost ?? 0),
+          bSpend: existing.bSpend + (s.af.spend ?? 0),
           bInstalls: existing.bInstalls + (s.af.installs ?? 0),
         });
       }

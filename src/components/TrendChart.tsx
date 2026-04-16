@@ -60,19 +60,19 @@ function extractMetric(day: DayData, metric: ChartMetric, os: string[]): number 
 
   const af = slice.af;
   switch (metric) {
-    case "spend":    return af.cost;
+    case "spend":    return af.spend;
     case "installs": return af.installs;
     case "revenue":  return af.revenue;
-    case "ecpi":     return af.installs > 0 ? af.cost / af.installs : 0;
+    case "ecpi":     return af.installs > 0 ? af.spend / af.installs : 0;
     case "ipm":      return af.impressions > 0 ? (af.installs / af.impressions) * 1000 : 0;
     case "cvr":      return af.clicks > 0 ? (af.installs / af.clicks) * 100 : 0;
     case "ctr":      return af.impressions > 0 ? (af.clicks / af.impressions) * 100 : 0;
     case "arpuD0":   return af.installs > 0 ? af.revenue / af.installs : 0;
     case "arpuD7":   return af.installs > 0 ? af.revenue / af.installs : 0;
     case "arpuD30":  return af.installs > 0 ? af.revenue / af.installs : 0;
-    case "roasD0":   return af.cost > 0 ? (af.revenue / af.cost) * 100 : 0;
-    case "roasD7":   return af.cost > 0 ? (af.revenue / af.cost) * 100 : 0;
-    case "roasD30":  return af.cost > 0 ? (af.revenue / af.cost) * 100 : 0;
+    case "roasD0":   return af.spend > 0 ? (af.revenue / af.spend) * 100 : 0;
+    case "roasD7":   return af.spend > 0 ? (af.revenue / af.spend) * 100 : 0;
+    case "roasD30":  return af.spend > 0 ? (af.revenue / af.spend) * 100 : 0;
     default:         return 0;
   }
 }
