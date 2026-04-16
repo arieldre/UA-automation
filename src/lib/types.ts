@@ -42,12 +42,28 @@ export interface AFMetrics {
   arpuAF: number;
 }
 
+export interface AFChannelMetrics {
+  mediaSource: string;
+  installs: number;
+  clicks: number;
+  impressions: number;
+  cost: number;
+  revenue: number;
+  ecpi: number;
+  ipm: number;
+  roas: number;
+}
+
 export interface DayData {
   date: string;
   all: { ga: ReportMetrics; af: AFMetrics };
   android: { ga: ReportMetrics; af: AFMetrics };
   ios: { ga: ReportMetrics; af: AFMetrics };
   campaigns: Record<string, { ga: ReportMetrics; af: AFMetrics }>;
+  byMediaSource?: {
+    android: Record<string, AFChannelMetrics>;
+    ios: Record<string, AFChannelMetrics>;
+  };
 }
 
 export interface ReportResponse {
@@ -61,6 +77,11 @@ export interface ReportResponse {
   };
   days: DayData[];
   _fromDB: boolean;
+  byMediaSource?: {
+    android: Record<string, AFChannelMetrics>;
+    ios: Record<string, AFChannelMetrics>;
+  };
+  gaps?: string[];
 }
 
 // ── Facebook API types ──
