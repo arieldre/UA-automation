@@ -188,7 +188,7 @@ async function fetchAFByMediaSource(androidId, iosId, from, to) {
         { metric_name: 'Revenue', period: '1' },
         { metric_name: 'Revenue', period: '7' },
       ],
-      row_count: 2000,
+      row_count: 300,
     });
 
     // Call 2: geo breakdown
@@ -202,7 +202,7 @@ async function fetchAFByMediaSource(androidId, iosId, from, to) {
         { metric_name: 'Cost' },
         { metric_name: 'Revenue', period: '0' },
       ],
-      row_count: 5000,
+      row_count: 300,
     });
 
     // ── Parse main ─────────────────────────────────────────────────────────────
