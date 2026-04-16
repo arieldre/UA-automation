@@ -197,7 +197,7 @@ async function fetchAFByMediaSource(androidId, iosId, from, to) {
     return result;
   } catch (e) {
     console.warn('[af-mcp] fetchAFByMediaSource error:', e.message);
-    return {};
+    throw e;
   }
 }
 

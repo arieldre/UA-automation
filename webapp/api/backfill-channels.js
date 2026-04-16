@@ -34,7 +34,12 @@ module.exports = async function handler(req, res) {
 
   console.log(`[backfill-channels] Fetching ${from} → ${to}`);
 
-  const byDate = await fetchAFByMediaSource(androidId, iosId, from, to);
+  let byDate;
+  try {
+    byDate = await fetchAFByMediaSource(androidId, iosId, from, to);
+  } catch (e) {
+    return res.status(500).json({ error: `MCP call failed: ${e.message}`, _debug: { hasAndroidId: !!androidId, hasIosId: !!iosId, hasMcpToken: !!process.env.APPSFLYER_MCP, mcpTokenLen: (process.env.APPSFLYER_MCP || '').length } });
+  }
 
   const allDates = Object.keys(byDate).sort();
 
