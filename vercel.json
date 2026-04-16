@@ -1,9 +1,9 @@
 {
   "framework": "nextjs",
-  "rewrites": [
+  "crons": [
     {
-      "source": "/api/:path*",
-      "destination": "https://ua-automation-lac.vercel.app/api/:path*"
+      "path": "/api/cron/refresh",
+      "schedule": "0 6 * * *"
     }
   ]
 }

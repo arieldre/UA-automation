@@ -141,63 +141,119 @@ function colVal(row, ...names) {
   return '';
 }
 
+function normalizePlatform(val) {
+  const v = (val || '').toLowerCase();
+  if (v === 'android' || v === 'android') return 'android';
+  if (v === 'ios' || v === 'iphone' || v === 'ipad') return 'ios';
+  return v;
+}
+
 // ── Main exported function ────────────────────────────────────────────────────
 
 /**
- * Fetch AppsFlyer aggregated data grouped by Media source + Date.
+ * Fetch AF data via MCP: one session, two calls (main metrics + geo).
+ * Groups by Media source + Platform + Date — handles both app IDs in one request.
  *
- * @param {string} androidId  - Android app ID (e.g. 'com.example.app')
- * @param {string} iosId      - iOS app ID (e.g. 'id1234567890')
- * @param {string} from       - Start date 'YYYY-MM-DD'
- * @param {string} to         - End date 'YYYY-MM-DD'
- * @returns {Promise<Object>} - { [date]: { [mediaSource]: { installs, cost, revenue, clicks, impressions } } }
+ * @returns {Promise<Object>} {
+ *   android: { [date]: { [mediaSource]: { installs, cost, revenue, clicks, impressions, rev_d0, rev_d1, rev_d7 } } },
+ *   ios:     { [date]: { [mediaSource]: { ... } } },
+ *   geo: {
+ *     android: { [date]: [{ country, media_source, installs, cost, rev_d0 }] },
+ *     ios:     { [date]: [...] },
+ *   }
+ * }
  */
 async function fetchAFByMediaSource(androidId, iosId, from, to) {
   const token = process.env.APPSFLYER_MCP?.trim();
   if (!token) {
     console.warn('[af-mcp] APPSFLYER_MCP not set');
-    return {};
+    return { android: {}, ios: {}, geo: { android: {}, ios: {} } };
   }
 
   try {
     const sessionId = await initMcpSession(MCP_URL, token);
-    const rawText = await callMcpTool(MCP_URL, token, sessionId, 1, {
+
+    // Call 1: main metrics grouped by Media source + Platform + Date
+    const mainText = await callMcpTool(MCP_URL, token, sessionId, 1, {
       app_ids: [androidId, iosId],
       start_date: from,
       end_date: to,
-      groupings: ['Media source', 'Date'],
+      groupings: ['Media source', 'Platform', 'Date'],
       metrics: [
         { metric_name: 'Cost' },
         { metric_name: 'Installs' },
         { metric_name: 'Clicks' },
         { metric_name: 'Impressions' },
         { metric_name: 'Revenue', period: '0' },
+        { metric_name: 'Revenue', period: '1' },
+        { metric_name: 'Revenue', period: '7' },
       ],
-      row_count: 300,
+      row_count: 2000,
     });
 
-    const rows = parseMcpCsv(rawText || '');
-    const result = {};
+    // Call 2: geo breakdown
+    const geoText = await callMcpTool(MCP_URL, token, sessionId, 2, {
+      app_ids: [androidId, iosId],
+      start_date: from,
+      end_date: to,
+      groupings: ['Geo', 'Media source', 'Platform', 'Date'],
+      metrics: [
+        { metric_name: 'Installs' },
+        { metric_name: 'Cost' },
+        { metric_name: 'Revenue', period: '0' },
+      ],
+      row_count: 5000,
+    });
 
-    for (const row of rows) {
+    // ── Parse main ─────────────────────────────────────────────────────────────
+    const result = { android: {}, ios: {}, geo: { android: {}, ios: {} } };
+    const mainRows = parseMcpCsv(mainText || '');
+
+    for (const row of mainRows) {
       const date        = (row['Date'] || '').trim();
       const mediaSource = (row['Media source'] || '').trim();
-      if (!date || !mediaSource) continue;
+      const platform    = normalizePlatform(row['Platform'] || row['OS'] || '');
+      if (!date || !mediaSource || !platform) continue;
+      if (platform !== 'android' && platform !== 'ios') continue;
 
+      if (!result[platform][date]) result[platform][date] = {};
       const installs    = Math.round(parseNum(colVal(row, 'Installs appsflyer', 'Installs')));
       const cost        = parseNum(colVal(row, 'Total Cost', 'Cost'));
-      const revenue     = parseNum(colVal(row, 'Revenue days 0 cumulative appsflyer', 'Total Revenue', 'Revenue'));
+      const revenue     = parseNum(colVal(row, 'Revenue days 0 cumulative appsflyer', 'Revenue'));
       const clicks      = Math.round(parseNum(colVal(row, 'Clicks')));
       const impressions = Math.round(parseNum(colVal(row, 'Impressions')));
+      const rev_d0      = parseNum(colVal(row, 'Revenue days 0 cumulative appsflyer', 'Revenue days 0'));
+      const rev_d1      = parseNum(colVal(row, 'Revenue days 1 cumulative appsflyer', 'Revenue days 1'));
+      const rev_d7      = parseNum(colVal(row, 'Revenue days 7 cumulative appsflyer', 'Revenue days 7'));
 
-      if (!result[date]) result[date] = {};
-      result[date][mediaSource] = { installs, cost, revenue, clicks, impressions };
+      result[platform][date][mediaSource] = { installs, cost, revenue, clicks, impressions, rev_d0, rev_d1, rev_d7 };
+    }
+
+    // ── Parse geo ──────────────────────────────────────────────────────────────
+    const geoRows = parseMcpCsv(geoText || '');
+
+    for (const row of geoRows) {
+      const date        = (row['Date'] || '').trim();
+      const mediaSource = (row['Media source'] || '').trim();
+      const country     = (row['Geo'] || row['Country'] || '').trim();
+      const platform    = normalizePlatform(row['Platform'] || row['OS'] || '');
+      if (!date || !platform) continue;
+      if (platform !== 'android' && platform !== 'ios') continue;
+
+      if (!result.geo[platform][date]) result.geo[platform][date] = [];
+      result.geo[platform][date].push({
+        country,
+        media_source: mediaSource,
+        installs:     Math.round(parseNum(colVal(row, 'Installs appsflyer', 'Installs'))),
+        cost:         parseNum(colVal(row, 'Total Cost', 'Cost')),
+        rev_d0:       parseNum(colVal(row, 'Revenue days 0 cumulative appsflyer', 'Revenue days 0', 'Revenue')),
+      });
     }
 
     return result;
   } catch (e) {
     console.warn('[af-mcp] fetchAFByMediaSource error:', e.message);
-    return {};
+    return { android: {}, ios: {}, geo: { android: {}, ios: {} } };
   }
 }
 

@@ -1,8 +1,7 @@
 require('dotenv').config();
 const { getCampaigns, storeCampaigns, getAssetState, storeAssetState, getMissingAFChannelDates, storeAFChannelForDate } = require('../../db');
 const { _test: assetsTest } = require('../assets');
-const { fetchAFChannels, parseAFChannels, mergeAFChannelPlatforms } = require('../networks')._helpers;
-const { fetchCohortByChannel, fetchCohortByChannelGeo, fetchCohortRetention } = require('../../lib/af-cohort');
+const { fetchAFByMediaSource } = require('../../lib/af-mcp');
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
         APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
@@ -60,62 +59,34 @@ async function refreshCampaignAssets(campaign, today) {
   await storeAssetState(campaign.id, stateDoc);
 }
 
-function mergeChannelCohort(channels, cohortAndroid, cohortIos, retAndroid, retIos) {
-  const out = {};
-  for (const [ch, m] of Object.entries(channels)) {
-    const ca = cohortAndroid?.[ch] || {};
-    const ci = cohortIos?.[ch] || {};
-    const ra = retAndroid?.[ch] || {};
-    const ri = retIos?.[ch] || {};
-    out[ch] = {
-      ...m,
-      rev_d0:  (ca.rev_d0  || 0) + (ci.rev_d0  || 0),
-      rev_d1:  (ca.rev_d1  || 0) + (ci.rev_d1  || 0),
-      rev_d7:  (ca.rev_d7  || 0) + (ci.rev_d7  || 0),
-      ret_d1:  (ra.ret_d1  || 0) + (ri.ret_d1  || 0),
-      ret_d7:  (ra.ret_d7  || 0) + (ri.ret_d7  || 0),
-      ret_d30: (ra.ret_d30 || 0) + (ri.ret_d30 || 0),
-    };
-  }
-  return out;
-}
-
 async function refreshAFChannels(yesterday) {
   const androidId = APPSFLYER_ANDROID_APP_ID;
   const iosId     = APPSFLYER_IOS_APP_ID;
   if (!androidId || !iosId) return;
 
-  // Only fetch yesterday's new data — backfill script handles historical fills
-  const missingAndroid = await getMissingAFChannelDates(androidId, yesterday, yesterday);
-  if (missingAndroid.length === 0) return; // already stored
+  // Revision window: always re-fetch last 7 days (AF revises attribution up to 7 days)
+  const revisionFrom = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
 
-  const [androidRaw, iosRaw, cohortAndroidResult, cohortIosResult, cohortGeoAndroidResult, cohortGeoIosResult, retAndroidResult, retIosResult] = await Promise.all([
-    fetchAFChannels(androidId, yesterday, yesterday),
-    fetchAFChannels(iosId,     yesterday, yesterday),
-    fetchCohortByChannel(androidId, yesterday, yesterday),
-    fetchCohortByChannel(iosId,     yesterday, yesterday),
-    fetchCohortByChannelGeo(androidId, yesterday, yesterday),
-    fetchCohortByChannelGeo(iosId,     yesterday, yesterday),
-    fetchCohortRetention(androidId, yesterday, yesterday),
-    fetchCohortRetention(iosId,     yesterday, yesterday),
-  ]);
+  console.log(`[cron] refreshAFChannels: ${revisionFrom} → ${yesterday} via MCP`);
 
-  const channels = mergeAFChannelPlatforms(
-    parseAFChannels(androidRaw),
-    parseAFChannels(iosRaw)
-  );
+  const data = await fetchAFByMediaSource(androidId, iosId, revisionFrom, yesterday);
 
-  const cohortAndroid = cohortAndroidResult?.[yesterday] || {};
-  const cohortIos     = cohortIosResult?.[yesterday]     || {};
-  const retAndroid    = retAndroidResult?.[yesterday]    || {};
-  const retIos        = retIosResult?.[yesterday]        || {};
-  const enrichedChannels = mergeChannelCohort(channels, cohortAndroid, cohortIos, retAndroid, retIos);
+  const allDates = [...new Set([
+    ...Object.keys(data.android),
+    ...Object.keys(data.ios),
+  ])].sort().filter(d => d >= revisionFrom && d <= yesterday);
 
-  const geoAndroid = cohortGeoAndroidResult?.[yesterday] || [];
-  const geoIos     = cohortGeoIosResult?.[yesterday]     || [];
-  const geo        = [...geoAndroid, ...geoIos];
+  for (const date of allDates) {
+    const androidChannels = data.android[date] || {};
+    const iosChannels     = data.ios[date]     || {};
+    const androidGeo      = data.geo.android[date] || [];
+    const iosGeo          = data.geo.ios[date]     || [];
 
-  if (Object.keys(enrichedChannels).length > 0) await storeAFChannelForDate(androidId, yesterday, enrichedChannels, geo);
+    if (Object.keys(androidChannels).length > 0)
+      await storeAFChannelForDate(androidId, date, androidChannels, androidGeo.length ? androidGeo : null);
+    if (Object.keys(iosChannels).length > 0)
+      await storeAFChannelForDate(iosId, date, iosChannels, iosGeo.length ? iosGeo : null);
+  }
 }
 
 module.exports = async function handler(req, res) {

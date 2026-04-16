@@ -1,14 +1,12 @@
 require('dotenv').config();
-const { getCampaigns, storeCampaigns, getAssetState, storeAssetState, getMissingAFChannelDates, storeAFChannelForDate, getDatesInRange } = require('../../webapp/db');
+const { getCampaigns, storeCampaigns, getAssetState, storeAssetState, storeAFChannelForDate } = require('../../webapp/db');
 const { _test: assetsTest }                    = require('../assets');
-const { _test: networksTest, _helpers: networksHelpers } = require('../networks');
+const { fetchAFByMediaSource } = require('../../webapp/lib/af-mcp');
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
         APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
 
 const { processAssetResults, computeAssetStateDiff } = assetsTest;
-const { fetchAFChannels, mergeAFChannelPlatforms }   = networksTest;
-const { parseAFChannelsByDate }                      = networksHelpers;
 
 let _cachedToken = null, _tokenExpiry = 0;
 async function getAccessToken() {
@@ -61,45 +59,33 @@ async function refreshCampaignAssets(campaign, today) {
   await storeAssetState(campaign.id, stateDoc);
 }
 
-// AF data can be revised up to 7 days after attribution — always re-fetch the revision window.
-const REVISION_DAYS = 7;
-
 async function refreshAFChannels(yesterday) {
   const androidId = APPSFLYER_ANDROID_APP_ID;
   const iosId     = APPSFLYER_IOS_APP_ID;
   if (!androidId || !iosId) return;
 
-  // Revision window: last REVISION_DAYS days (inclusive of yesterday)
-  const revisionFrom = new Date(Date.now() - REVISION_DAYS * 86400000).toISOString().split('T')[0];
+  // Revision window: always re-fetch last 7 days (AF revises attribution up to 7 days)
+  const revisionFrom = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
 
-  // All dates in window (these always get re-fetched)
-  const revisionDates = getDatesInRange(revisionFrom, yesterday);
+  console.log(`[cron] refreshAFChannels: ${revisionFrom} → ${yesterday} via MCP`);
 
-  // Also fetch any dates before the window that are still missing
-  const missing = await getMissingAFChannelDates(androidId, revisionFrom, yesterday);
+  const data = await fetchAFByMediaSource(androidId, iosId, revisionFrom, yesterday);
 
-  // Dedup and sort
-  const toFetch = [...new Set([...missing, ...revisionDates])].sort();
-  if (toFetch.length === 0) return;
+  const allDates = [...new Set([
+    ...Object.keys(data.android),
+    ...Object.keys(data.ios),
+  ])].sort().filter(d => d >= revisionFrom && d <= yesterday);
 
-  const fetchFrom = toFetch[0];
-  const fetchTo   = toFetch[toFetch.length - 1];
-
-  const [rawAndroid, rawIos] = await Promise.all([
-    fetchAFChannels(androidId, fetchFrom, fetchTo),
-    fetchAFChannels(iosId, fetchFrom, fetchTo),
-  ]);
-
-  const byDateAndroid = rawAndroid?._afError ? {} : parseAFChannelsByDate(rawAndroid);
-  const byDateIos     = rawIos?._afError     ? {} : parseAFChannelsByDate(rawIos);
-
-  const allDates = new Set([...Object.keys(byDateAndroid), ...Object.keys(byDateIos)]);
   for (const date of allDates) {
-    if (date < revisionFrom || date > yesterday) continue;
-    const merged = mergeAFChannelPlatforms(byDateAndroid[date] || {}, byDateIos[date] || {});
-    if (Object.keys(merged).length > 0) {
-      await storeAFChannelForDate(androidId, date, merged);
-    }
+    const androidChannels = data.android[date] || {};
+    const iosChannels     = data.ios[date]     || {};
+    const androidGeo      = data.geo.android[date] || [];
+    const iosGeo          = data.geo.ios[date]     || [];
+
+    if (Object.keys(androidChannels).length > 0)
+      await storeAFChannelForDate(androidId, date, androidChannels, androidGeo.length ? androidGeo : null);
+    if (Object.keys(iosChannels).length > 0)
+      await storeAFChannelForDate(iosId, date, iosChannels, iosGeo.length ? iosGeo : null);
   }
 }
 
