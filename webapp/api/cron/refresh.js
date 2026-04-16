@@ -1,13 +1,14 @@
 require('dotenv').config();
 const { getCampaigns, storeCampaigns, getAssetState, storeAssetState, getMissingAFChannelDates, storeAFChannelForDate } = require('../../db');
 const { _test: assetsTest } = require('../assets');
-const { _test: networksTest } = require('../networks');
+const { _test: networksTest, _helpers: networksHelpers } = require('../networks');
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
         APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
 
 const { processAssetResults, computeAssetStateDiff } = assetsTest;
-const { fetchAFChannels, parseAFChannels, mergeAFChannelPlatforms } = networksTest;
+const { fetchAFChannels, mergeAFChannelPlatforms } = networksTest;
+const { parseAFChannelsByDate } = networksHelpers;
 
 let _cachedToken = null, _tokenExpiry = 0;
 async function getAccessToken() {
@@ -60,21 +61,31 @@ async function refreshCampaignAssets(campaign, today) {
   await storeAssetState(campaign.id, stateDoc);
 }
 
+const REVISION_DAYS = 30;
+
 async function refreshAFChannels(yesterday) {
   const androidId = APPSFLYER_ANDROID_APP_ID;
   const iosId     = APPSFLYER_IOS_APP_ID;
   if (!androidId || !iosId) return;
 
-  const missing = await getMissingAFChannelDates(androidId, yesterday, yesterday);
-  if (missing.length === 0) return; // already stored
+  // Always refresh the last REVISION_DAYS (AF revises recent conversion data)
+  const revisionFrom = new Date(Date.now() - REVISION_DAYS * 86400000).toISOString().split('T')[0];
 
   const [rawAndroid, rawIos] = await Promise.all([
-    fetchAFChannels(androidId, yesterday, yesterday),
-    fetchAFChannels(iosId, yesterday, yesterday),
+    fetchAFChannels(androidId, revisionFrom, yesterday),
+    fetchAFChannels(iosId, revisionFrom, yesterday),
   ]);
-  const merged = mergeAFChannelPlatforms(parseAFChannels(rawAndroid), parseAFChannels(rawIos));
-  if (Object.keys(merged).length > 0) {
-    await storeAFChannelForDate(androidId, yesterday, merged);
+
+  const byDateAndroid = rawAndroid?._afError ? {} : parseAFChannelsByDate(rawAndroid);
+  const byDateIos     = rawIos?._afError     ? {} : parseAFChannelsByDate(rawIos);
+  const allDates = [...new Set([...Object.keys(byDateAndroid), ...Object.keys(byDateIos)])].sort();
+
+  for (const date of allDates) {
+    if (date < revisionFrom || date > yesterday) continue;
+    const merged = mergeAFChannelPlatforms(byDateAndroid[date] || {}, byDateIos[date] || {});
+    if (Object.keys(merged).length > 0) {
+      await storeAFChannelForDate(androidId, date, merged);
+    }
   }
 }
 

@@ -204,7 +204,8 @@ export default function TrendChart() {
 
   const chartData = useMemo(() => {
     if (!data?.days?.length) return [];
-    return groupDays(data.days, granularity, activeMetrics, filters.os);
+    const sorted = [...data.days].sort((a, b) => a.date.localeCompare(b.date));
+    return groupDays(sorted, granularity, activeMetrics, filters.os);
   }, [data, granularity, activeMetrics, filters.os]);
 
   const hasRightAxis = activeMetrics.some(
