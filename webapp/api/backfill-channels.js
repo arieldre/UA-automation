@@ -15,7 +15,7 @@ require('dotenv').config();
 
 const { storeAFChannelForDate, getDatesInRange, getMissingAFChannelDates } = require('../db');
 const { fetchAFChannels, parseAFChannelsByDate, mergeAFChannelPlatforms } = require('./networks')._helpers;
-const { fetchCohortByChannel, fetchCohortByChannelGeo, fetchCohortRetention } = require('./lib/af-cohort');
+const { fetchCohortByChannel, fetchCohortByChannelGeo, fetchCohortRetention } = require('../lib/af-cohort');
 
 const {
   APPSFLYER_ANDROID_APP_ID,

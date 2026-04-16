@@ -2,7 +2,7 @@ require('dotenv').config();
 const { getCampaigns, storeCampaigns, getAssetState, storeAssetState, getMissingAFChannelDates, storeAFChannelForDate } = require('../../db');
 const { _test: assetsTest } = require('../assets');
 const { fetchAFChannels, parseAFChannels, mergeAFChannelPlatforms } = require('../networks')._helpers;
-const { fetchCohortByChannel, fetchCohortByChannelGeo, fetchCohortRetention } = require('../lib/af-cohort');
+const { fetchCohortByChannel, fetchCohortByChannelGeo, fetchCohortRetention } = require('../../lib/af-cohort');
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
         APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
