@@ -23,3 +23,9 @@ export function formatROAS(n: number): { text: string; colorClass: string } {
 
   return { text, colorClass };
 }
+
+export function formatCompact(n: number): string {
+  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
