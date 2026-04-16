@@ -7,7 +7,7 @@
 require('dotenv').config();
 
 const { storeAFChannelForDate, getDatesInRange } = require('../db');
-const { _helpers: { fetchAFChannels, parseAFChannelsByDate, mergeAFChannelPlatforms } } = require('./networks');
+const { fetchAFByMediaSource } = require('./lib/af-mcp');
 
 const {
   APPSFLYER_ANDROID_APP_ID,
@@ -34,32 +34,19 @@ module.exports = async function handler(req, res) {
 
   console.log(`[backfill-channels] Fetching ${from} → ${to}`);
 
-  const [rawAndroid, rawIos] = await Promise.all([
-    fetchAFChannels(androidId, from, to),
-    fetchAFChannels(iosId, from, to),
-  ]);
+  const byDate = await fetchAFByMediaSource(androidId, iosId, from, to);
 
-  if (rawAndroid?._afError) console.warn('Android AF error:', rawAndroid._afError);
-  if (rawIos?._afError)     console.warn('iOS AF error:', rawIos._afError);
-
-  const byDateAndroid = rawAndroid?._afError ? {} : parseAFChannelsByDate(rawAndroid);
-  const byDateIos     = rawIos?._afError     ? {} : parseAFChannelsByDate(rawIos);
-
-  const allDates = [...new Set([...Object.keys(byDateAndroid), ...Object.keys(byDateIos)])].sort();
+  const allDates = Object.keys(byDate).sort();
 
   let stored = 0;
   const skipped = [];
   for (const date of allDates) {
     if (date < from || date > to) continue;
-    const androidChannels = byDateAndroid[date] || {};
-    const iosChannels     = byDateIos[date]     || {};
-    const hasData = Object.keys(androidChannels).length > 0 || Object.keys(iosChannels).length > 0;
-    if (hasData) {
-      // Store android and ios separately so the report can read per-platform splits
-      if (Object.keys(androidChannels).length > 0) await storeAFChannelForDate(androidId, date, androidChannels);
-      if (Object.keys(iosChannels).length > 0)     await storeAFChannelForDate(iosId,     date, iosChannels);
+    const channels = byDate[date] || {};
+    if (Object.keys(channels).length > 0) {
+      await storeAFChannelForDate(androidId, date, channels);
       stored++;
-      console.log(`  stored ${date}: android=[${Object.keys(androidChannels).join(', ')}] ios=[${Object.keys(iosChannels).join(', ')}]`);
+      console.log(`  stored ${date}: [${Object.keys(channels).join(', ')}]`);
     } else {
       skipped.push(date);
     }
@@ -75,7 +62,7 @@ module.exports = async function handler(req, res) {
     skipped: skipped.length,
     gaps,
     channels: Object.keys(
-      Object.values(byDateAndroid)[0] || Object.values(byDateIos)[0] || {}
+      Object.values(byDate)[0] || {}
     ),
   });
 };

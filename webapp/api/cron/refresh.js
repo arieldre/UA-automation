@@ -1,14 +1,12 @@
 require('dotenv').config();
 const { getCampaigns, storeCampaigns, getAssetState, storeAssetState, getMissingAFChannelDates, storeAFChannelForDate } = require('../../db');
 const { _test: assetsTest } = require('../assets');
-const { _test: networksTest, _helpers: networksHelpers } = require('../networks');
+const { fetchAFByMediaSource } = require('../lib/af-mcp');
 
 const { GOOGLE_DEVELOPER_TOKEN, GOOGLE_CUSTOMER_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
         APPSFLYER_ANDROID_APP_ID, APPSFLYER_IOS_APP_ID } = process.env;
 
 const { processAssetResults, computeAssetStateDiff } = assetsTest;
-const { fetchAFChannels, mergeAFChannelPlatforms } = networksTest;
-const { parseAFChannelsByDate } = networksHelpers;
 
 let _cachedToken = null, _tokenExpiry = 0;
 async function getAccessToken() {
@@ -67,25 +65,12 @@ async function refreshAFChannels(yesterday) {
   if (!androidId || !iosId) return;
 
   // Only fetch yesterday's new data — backfill script handles historical fills
-  // Check both platforms independently so a failed iOS fetch doesn't block android (and vice versa)
-  const [missingAndroid, missingIos] = await Promise.all([
-    getMissingAFChannelDates(androidId, yesterday, yesterday),
-    getMissingAFChannelDates(iosId,     yesterday, yesterday),
-  ]);
-  if (missingAndroid.length === 0 && missingIos.length === 0) return; // both already stored
+  const missingAndroid = await getMissingAFChannelDates(androidId, yesterday, yesterday);
+  if (missingAndroid.length === 0) return; // already stored
 
-  const [rawAndroid, rawIos] = await Promise.all([
-    fetchAFChannels(androidId, yesterday, yesterday),
-    fetchAFChannels(iosId, yesterday, yesterday),
-  ]);
-
-  const byDateAndroid = rawAndroid?._afError ? {} : parseAFChannelsByDate(rawAndroid);
-  const byDateIos     = rawIos?._afError     ? {} : parseAFChannelsByDate(rawIos);
-  const androidChannels = byDateAndroid[yesterday] || {};
-  const iosChannels     = byDateIos[yesterday]     || {};
-  // Store android and ios separately so report can read per-platform splits
-  if (Object.keys(androidChannels).length > 0) await storeAFChannelForDate(androidId, yesterday, androidChannels);
-  if (Object.keys(iosChannels).length > 0)     await storeAFChannelForDate(iosId,     yesterday, iosChannels);
+  const byDate = await fetchAFByMediaSource(androidId, iosId, yesterday, yesterday);
+  const channels = byDate[yesterday] || {};
+  if (Object.keys(channels).length > 0) await storeAFChannelForDate(androidId, yesterday, channels);
 }
 
 module.exports = async function handler(req, res) {
