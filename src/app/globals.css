@@ -1,6 +1,43 @@
 @import "tailwindcss";
 
+/* ── Light theme (default) ── */
 :root {
+  --bg: #F9FAFB;
+  --surface: #FFFFFF;
+  --surface2: #F3F4F6;
+  --border: #E5E7EB;
+  --text: #111827;
+  --muted: #6B7280;
+  --accent: #111827;
+  --green: #059669;
+  --red: #DC2626;
+  --yellow: #D97706;
+  --green-bg: rgba(5, 150, 105, 0.08);
+  --red-bg: rgba(220, 38, 38, 0.08);
+  --yellow-bg: rgba(217, 119, 6, 0.08);
+
+  /* Pill palette */
+  --pill-spend: #7C3AED;
+  --pill-installs: #059669;
+  --pill-revenue: #0891B2;
+  --pill-ipm: #D97706;
+  --pill-arpu-d0: #2563EB;
+  --pill-arpu-d7: #3B82F6;
+  --pill-arpu-d30: #60A5FA;
+  --pill-roas-d0: #D97706;
+  --pill-roas-d7: #B45309;
+  --pill-roas-d30: #DC2626;
+  --pill-ecpi: #7C3AED;
+  --pill-ctr: #0EA5E9;
+  --pill-cvr: #8B5CF6;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-full: 9999px;
+}
+
+/* ── Dark theme ── */
+[data-theme="dark"] {
   --bg: #0d0d14;
   --surface: #16161f;
   --surface2: #1e1e2a;
@@ -16,65 +53,30 @@
   --yellow-bg: rgba(234, 179, 8, 0.08);
 }
 
-[data-theme="light"] {
-  --bg: #f4f4f8;
-  --surface: #ffffff;
-  --surface2: #ebebf3;
-  --border: #d8d8e8;
-  --text: #1a1a2e;
-  --muted: #6b6b88;
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ── Theme transition ── */
-html,
-body,
-aside,
-nav,
-main,
-div {
+/* ── Theme transitions ── */
+html, body, aside, nav, main, div, table, th, td, button, a, span {
   transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;
 }
 
 /* ── Selection ── */
 ::selection {
-  background: rgba(124, 111, 255, 0.3);
+  background: rgba(124, 111, 255, 0.2);
   color: var(--text);
 }
 
-/* ── Scrollbar (dark theme) ── */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
-}
-
-/* Firefox scrollbar */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
