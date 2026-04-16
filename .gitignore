@@ -19,6 +19,8 @@ Thumbs.db
 # Build output
 dist/
 build/
+.next/
+screenshots/
 
 # Misc
 *.local
@@ -26,3 +28,17 @@ build/
 
 # VS Code settings
 .vscode/
+.vercel
+.env*.local
+
+# Next.js
+.next/
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# Playwright screenshots (keep scripts but not output)
+screenshots/redesign-ref/page.html
+screenshots/redesign-ref/*.json
+
+# Scraper scripts (kept in repo but ignored from main tracking)
+# scripts/scrapers/
